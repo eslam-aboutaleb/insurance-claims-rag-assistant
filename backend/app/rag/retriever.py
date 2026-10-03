@@ -1,8 +1,11 @@
-"""
-Hybrid retrieval module for OmniCare policy documents.
+"""Thin adapter over the ragkit hybrid retriever.
 
-Uses the configured VectorStore (pgvector by default) for hybrid search
-combining vector similarity with PostgreSQL full-text search.
+The generic retriever moved to :mod:`ragkit.retrieval`
+(ragkit plan 04). This module keeps the historical
+import path working and binds the retriever to the
+OmniCare policy chunk table: the hardcoded
+``policy_chunks`` binding below moves to
+``app/domain/policies/`` in plan 06.
 """
 
 from __future__ import annotations
@@ -11,10 +14,15 @@ import logging
 from typing import Any
 
 from app.config import get_settings
-from app.rag.embedding import EmbeddingFactory
-from app.rag.vector_store import get_vector_store
+from app.database import async_session_factory
+from ragkit.retrieval import HybridRetriever, RetrieverSpec, as_dicts
 
 logger = logging.getLogger(__name__)
+
+_POLICY_CHUNKS_SPEC = RetrieverSpec(
+    table_name="policy_chunks",
+    metadata_fields=["section", "source", "chunk_index", "sub_chunk_index"],
+)
 
 
 async def retrieve_hybrid(
@@ -27,8 +35,8 @@ async def retrieve_hybrid(
     Orchestrates the two-stage retrieval pipeline:
       1. Embeds the query using the configured embedding function.
       2. Delegates to the vector store's ``hybrid_search`` method, which
-         executes parallel vector similarity and PostgreSQL full-text search CTEs
-         and merges results via Reciprocal Rank Fusion.
+         executes parallel vector similarity and PostgreSQL full-text search
+         CTEs and merges results via Reciprocal Rank Fusion.
 
     Args:
         query: The natural-language search query.
@@ -47,19 +55,17 @@ async def retrieve_hybrid(
         distance_threshold = settings.rag_distance_threshold
 
     try:
-        store = get_vector_store(table_name="policy_chunks", id_field="id")
-        embed_fn = EmbeddingFactory.get_embedding_function()
-        query_embedding = await embed_fn([query])
-        query_embedding = query_embedding[0]
-
-        return await store.hybrid_search(
-            query=query,
-            embedding=query_embedding,
-            n_results=n_results,
-            threshold=distance_threshold,
-            text_field="text",
-            metadata_fields=["section", "source", "chunk_index", "sub_chunk_index"],
+        retriever = HybridRetriever(
+            spec=_POLICY_CHUNKS_SPEC,
+            settings=settings,
+            session_factory=async_session_factory,
         )
+        results = await retriever.retrieve(
+            query,
+            n_results=n_results,
+            distance_threshold=distance_threshold,
+        )
+        return as_dicts(results)
     except Exception as exc:
         logger.error("Hybrid retrieval failed: %s", exc)
         return []

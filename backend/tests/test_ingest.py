@@ -1,291 +1,97 @@
 """
-Tests for app.rag.ingest module.
+Tests for app.rag.ingest -- the thin adapter over ragkit.
 
-Focuses on the advisory lock behavior that prevents the policy ingestion
-race condition when multiple backend instances start concurrently.
+The advisory lock and the ingestion logic moved to
+:class:`ragkit.ingestion.IngestionPipeline` (ragkit
+plan 04) and are tested in ``libs/ragkit/tests``
+(``test_ingestion_locking.py`` and
+``test_ingestion_pipeline.py``). These tests verify
+the adapter wiring only: that ``ingest_policy`` builds
+the pipeline, binds the policy file as the document
+source, and passes the policy path as the advisory-lock
+key so concurrent ingestion of the same policy stays
+serialized.
 """
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.rag.ingest import _do_ingest, ingest_policy
-
-
-def _make_session():
-    """Create a mock SQLAlchemy async session."""
-    session = MagicMock()
-    session.execute = AsyncMock()
-    session.execute.return_value = MagicMock()
-    session.commit = AsyncMock()
-    session.flush = AsyncMock()
-    session.rollback = AsyncMock()
-    session.add = MagicMock()
-    return session
+from app.rag.ingest import PolicyVersionStore, ingest_policy
 
 
 @pytest.mark.asyncio
-async def test_do_ingest_skips_when_snapshot_matches():
-    """_do_ingest should skip ingestion when the active version snapshot matches."""
+async def test_ingest_policy_runs_pipeline_with_advisory_lock_key():
+    """ingest_policy() runs the pipeline with the policy path as lock key.
+
+    The advisory lock is acquired because ``lock_key`` is
+    passed to ``pipeline.run``; the lock itself is
+    implemented and tested in ragkit.
+    """
     policy_path = "/tmp/policy.md"
-    source_hash = "abc123"
 
-    session = _make_session()
-
-    policy = MagicMock()
-    policy.policy_id = "policy-1"
-
-    active_version = MagicMock()
-    active_version.source_hash = source_hash
-    active_version.embedding_model = "text-embedding-3-small"
-    active_version.embedding_dim = 1536
-    active_version.chunker_version = "v1"
-    active_version.chunk_size = 600
-    active_version.overlap = 100
-    active_version.retrieval_schema_version = "v1"
-
-    result1 = MagicMock()
-    result1.scalar_one_or_none.return_value = policy
-    result2 = MagicMock()
-    result2.scalar_one_or_none.return_value = active_version
-
-    session.execute.side_effect = [result1, result2]
-
-    with patch("app.rag.ingest.get_vector_store") as mock_store:
-        mock_store.return_value.count = AsyncMock(return_value=42)
-
-        result = await _do_ingest(session, policy_path, source_hash)
-
-    assert result == 42
-
-
-@pytest.mark.asyncio
-async def test_do_ingest_performs_ingestion_when_hash_differs():
-    """_do_ingest should perform ingestion when the active version hash differs."""
-    policy_path = "/tmp/policy.md"
-    source_hash = "new_hash"
-
-    session = _make_session()
-
-    policy = MagicMock()
-    policy.policy_id = "policy-1"
-
-    active_version = None
-
-    result1 = MagicMock()
-    result1.scalar_one_or_none.return_value = policy
-    result2 = MagicMock()
-    result2.scalar_one_or_none.return_value = active_version
-    result3 = MagicMock()
-
-    session.execute.side_effect = [result1, result2, result3]
+    mock_pipeline = MagicMock()
+    mock_pipeline.run = AsyncMock(return_value=7)
+    mock_source = MagicMock()
 
     with (
-        patch("app.rag.ingest.chunk_policy_document") as mock_chunk,
-        patch("app.rag.ingest.EmbeddingFactory") as mock_factory,
-        patch("app.rag.ingest.get_vector_store") as mock_store,
-        patch("app.rag.ingest._validate_embedding"),
-        patch("app.rag.ingest.datetime") as mock_dt,
+        patch("app.rag.ingest.IngestionPipeline", return_value=mock_pipeline),
+        patch("app.rag.ingest.FileDocumentSource", return_value=mock_source),
+        patch("app.rag.ingest.get_vector_store"),
+        patch("app.rag.ingest.EmbeddingFactory"),
     ):
-        mock_chunk.return_value = [
-            {"text": "chunk 1", "metadata": {}},
-            {"text": "chunk 2", "metadata": {}},
-        ]
-        mock_embed_fn = AsyncMock(return_value=[[0.0] * 1536, [0.0] * 1536])
-        mock_factory.get_embedding_function.return_value = mock_embed_fn
-        mock_store.return_value.upsert = AsyncMock()
-        mock_dt.now.return_value = MagicMock()
-
-        result = await _do_ingest(session, policy_path, source_hash)
-
-    assert result == 2
-    assert session.add.call_count >= 1
-
-
-@pytest.mark.asyncio
-async def test_ingest_policy_acquires_advisory_lock():
-    """ingest_policy should acquire and release an advisory lock."""
-    policy_path = "/tmp/policy.md"
-    source_hash = "hash"
-
-    with (
-        patch("app.rag.ingest.async_session_factory") as mock_factory,
-        patch("app.rag.ingest._do_ingest", new_callable=AsyncMock, return_value=5),
-        patch("builtins.open", MagicMock()),
-        patch("app.rag.ingest.hashlib") as mock_hashlib,
-    ):
-        mock_hashlib.sha256.return_value.hexdigest.return_value = source_hash
-        mock_session = _make_session()
-        mock_factory.return_value.__aenter__ = AsyncMock(return_value=mock_session)
-        mock_factory.return_value.__aexit__ = AsyncMock(return_value=False)
-
         result = await ingest_policy(policy_path=policy_path)
 
-    assert result == 5
-    execute_calls = [str(call[0][0]) for call in mock_session.execute.call_args_list]
-    assert any("pg_advisory_lock" in s for s in execute_calls)
-    assert any("pg_advisory_unlock" in s for s in execute_calls)
+    assert result == 7
+
+    mock_pipeline.run.assert_awaited_once()
+    args, kwargs = mock_pipeline.run.call_args
+    # The source and the version store are positional arguments;
+    # the advisory-lock key is passed as a keyword argument.
+    assert args[0] is mock_source
+    assert isinstance(args[1], PolicyVersionStore)
+    assert kwargs.get("lock_key") == policy_path
 
 
 @pytest.mark.asyncio
-async def test_ingest_policy_releases_lock_on_failure():
-    """ingest_policy should release the advisory lock even if _do_ingest raises."""
+async def test_ingest_policy_builds_source_from_the_policy_path():
+    """The document source reads the policy file at ``policy_path``."""
     policy_path = "/tmp/policy.md"
-    source_hash = "hash"
+
+    mock_pipeline = MagicMock()
+    mock_pipeline.run = AsyncMock(return_value=0)
 
     with (
-        patch("app.rag.ingest.async_session_factory") as mock_factory,
-        patch(
-            "app.rag.ingest._do_ingest", new_callable=AsyncMock, side_effect=RuntimeError("boom")
-        ),
-        patch("builtins.open", MagicMock()),
-        patch("app.rag.ingest.hashlib") as mock_hashlib,
+        patch("app.rag.ingest.IngestionPipeline", return_value=mock_pipeline),
+        patch("app.rag.ingest.FileDocumentSource") as mock_source_cls,
+        patch("app.rag.ingest.get_vector_store"),
+        patch("app.rag.ingest.EmbeddingFactory"),
     ):
-        mock_hashlib.sha256.return_value.hexdigest.return_value = source_hash
-        mock_session = _make_session()
-        mock_factory.return_value.__aenter__ = AsyncMock(return_value=mock_session)
-        mock_factory.return_value.__aexit__ = AsyncMock(return_value=False)
+        await ingest_policy(policy_path=policy_path)
 
-        with pytest.raises(RuntimeError, match="boom"):
-            await ingest_policy(policy_path=policy_path)
-
-    execute_calls = [str(call[0][0]) for call in mock_session.execute.call_args_list]
-    assert any("pg_advisory_unlock" in s for s in execute_calls)
+    mock_source_cls.assert_called_once_with(policy_path)
 
 
 @pytest.mark.asyncio
-async def test_do_ingest_reingests_when_chunker_version_changes():
-    """_do_ingest should re-ingest when chunker_version differs even if source_hash is unchanged."""
-    policy_path = "/tmp/policy.md"
-    source_hash = "samehash"
+async def test_ingest_policy_uses_configured_path_when_none_given():
+    """ingest_policy() falls back to settings.policy_file_path."""
+    policy_path = "/tmp/configured-policy.md"
 
-    session = _make_session()
-
-    policy = MagicMock()
-    policy.policy_id = "policy-1"
-
-    active_version = MagicMock()
-    active_version.source_hash = source_hash
-    active_version.embedding_model = "text-embedding-3-large"
-    active_version.embedding_dim = 3072
-    active_version.chunker_version = "v1"
-    active_version.chunk_size = 600
-    active_version.overlap = 100
-    active_version.retrieval_schema_version = "v1"
-
-    result1 = MagicMock()
-    result1.scalar_one_or_none.return_value = policy
-    result2 = MagicMock()
-    result2.scalar_one_or_none.return_value = active_version
-    result3 = MagicMock()
-    result4 = MagicMock()
-
-    session.execute.side_effect = [result1, result2, result3, result4]
+    mock_pipeline = MagicMock()
+    mock_pipeline.run = AsyncMock(return_value=0)
+    mock_source = MagicMock()
+    mock_settings = MagicMock()
+    mock_settings.policy_file_path = policy_path
 
     with (
-        patch("app.rag.ingest.chunk_policy_document") as mock_chunk,
-        patch("app.rag.ingest.EmbeddingFactory") as mock_factory,
-        patch("app.rag.ingest.get_vector_store") as mock_store,
-        patch("app.rag.ingest._validate_embedding"),
-        patch("app.rag.ingest.datetime") as mock_dt,
+        patch("app.rag.ingest.IngestionPipeline", return_value=mock_pipeline),
+        patch("app.rag.ingest.FileDocumentSource", return_value=mock_source),
+        patch("app.rag.ingest.get_vector_store"),
+        patch("app.rag.ingest.EmbeddingFactory"),
+        patch("app.rag.ingest.get_settings", return_value=mock_settings),
     ):
-        mock_chunk.return_value = [
-            {"text": "chunk 1", "metadata": {}},
-        ]
-        mock_embed_fn = AsyncMock(return_value=[[0.0] * 1536])
-        mock_factory.get_embedding_function.return_value = mock_embed_fn
-        mock_store.return_value.upsert = AsyncMock()
-        mock_dt.now.return_value = MagicMock()
+        await ingest_policy()
 
-        with patch("app.rag.ingest._get_embedding_dim", return_value=1536):
-            result = await _do_ingest(session, policy_path, source_hash)
-
-    assert result == 1
-    assert session.add.call_count >= 1
-
-
-@pytest.mark.asyncio
-async def test_do_ingest_skips_when_snapshot_stable():
-    """_do_ingest should skip when all snapshot fields are unchanged."""
-    policy_path = "/tmp/policy.md"
-    source_hash = "samehash"
-
-    session = _make_session()
-
-    policy = MagicMock()
-    policy.policy_id = "policy-1"
-
-    active_version = MagicMock()
-    active_version.source_hash = source_hash
-    active_version.embedding_model = "text-embedding-3-small"
-    active_version.embedding_dim = 1536
-    active_version.chunker_version = "v1"
-    active_version.chunk_size = 600
-    active_version.overlap = 100
-    active_version.retrieval_schema_version = "v1"
-
-    result1 = MagicMock()
-    result1.scalar_one_or_none.return_value = policy
-    result2 = MagicMock()
-    result2.scalar_one_or_none.return_value = active_version
-
-    session.execute.side_effect = [result1, result2]
-
-    with patch("app.rag.ingest.get_vector_store") as mock_store:
-        mock_store.return_value.count = AsyncMock(return_value=5)
-
-        with patch("app.rag.ingest._get_embedding_dim", return_value=1536):
-            result = await _do_ingest(session, policy_path, source_hash)
-
-    assert result == 5
-
-
-@pytest.mark.asyncio
-async def test_do_ingest_reingests_when_embedding_model_changes():
-    """_do_ingest should re-ingest when embedding_model differs in snapshot."""
-    policy_path = "/tmp/policy.md"
-    source_hash = "samehash"
-
-    session = _make_session()
-
-    policy = MagicMock()
-    policy.policy_id = "policy-1"
-
-    active_version = MagicMock()
-    active_version.source_hash = source_hash
-    active_version.embedding_model = "text-embedding-3-large"
-    active_version.embedding_dim = 3072
-    active_version.chunker_version = "v1"
-    active_version.chunk_size = 600
-    active_version.overlap = 100
-    active_version.retrieval_schema_version = "v1"
-
-    result1 = MagicMock()
-    result1.scalar_one_or_none.return_value = policy
-    result2 = MagicMock()
-    result2.scalar_one_or_none.return_value = active_version
-    result3 = MagicMock()
-    result4 = MagicMock()
-
-    session.execute.side_effect = [result1, result2, result3, result4]
-
-    with (
-        patch("app.rag.ingest.chunk_policy_document") as mock_chunk,
-        patch("app.rag.ingest.EmbeddingFactory") as mock_factory,
-        patch("app.rag.ingest.get_vector_store") as mock_store,
-        patch("app.rag.ingest._validate_embedding"),
-        patch("app.rag.ingest.datetime") as mock_dt,
-    ):
-        mock_chunk.return_value = [
-            {"text": "chunk 1", "metadata": {}},
-        ]
-        mock_embed_fn = AsyncMock(return_value=[[0.0] * 1536])
-        mock_factory.get_embedding_function.return_value = mock_embed_fn
-        mock_store.return_value.upsert = AsyncMock()
-        mock_dt.now.return_value = MagicMock()
-
-        with patch("app.rag.ingest._get_embedding_dim", return_value=1536):
-            result = await _do_ingest(session, policy_path, source_hash)
-
-    assert result == 1
-    assert session.add.call_count >= 1
+    mock_pipeline.run.assert_awaited_once()
+    _, kwargs = mock_pipeline.run.call_args
+    assert kwargs.get("lock_key") == policy_path

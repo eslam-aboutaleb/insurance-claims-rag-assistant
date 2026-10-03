@@ -12,7 +12,9 @@ when the pipeline actually ran end to end:
 2. The advisory-lock release ran in a ``finally`` without a preceding rollback. A failed
    statement left the session in an aborted transaction, so ``pg_advisory_unlock`` raised
    ``InFailedSQLTransactionError`` and replaced the real ingestion error with one about
-   the lock.
+   the lock. The rollback-before-unlock now lives in ragkit's ``advisory_lock`` context
+   manager (tested in ``libs/ragkit/tests/test_ingestion_locking.py``); the adapter test
+   below verifies the originating error still reaches the caller.
 
 3. ``policy_id`` and ``policy_version_id`` were attached to the chunk dict at the top
    level, but the vector store derives its INSERT column list from
@@ -22,6 +24,8 @@ when the pipeline actually ran end to end:
 These tests use the live database. They truncate the policy tables only, so they can run
 alongside the rest of the suite.
 """
+
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 import pytest_asyncio
@@ -131,43 +135,45 @@ async def test_ingest_surfaces_the_real_error_not_the_lock_cleanup() -> None:
 
     Regression test for the missing rollback before ``pg_advisory_unlock``.
 
-    The failing statement must run on the *same* session that holds the advisory lock.
-    Raising from a stub, or failing on a separate connection, leaves that session
-    healthy, so the unlock succeeds and the test passes against the buggy code.
-
-    Verified to fail against the original code, where the unguarded unlock in ``finally``
-    replaced the real message with "current transaction is aborted".
+    The rollback-before-unlock now lives in ragkit's ``advisory_lock``
+    context manager (tested in ``libs/ragkit/tests/test_ingestion_locking.py``),
+    so a failed statement on the pipeline's owned session is rolled back before
+    the lock is released. This test verifies the adapter propagates the
+    pipeline's original error to the caller unchanged, instead of replacing it
+    with a lock-cleanup error such as "current transaction is aborted".
     """
     from sqlalchemy.exc import DBAPIError
 
     from app.rag import ingest as ingest_module
 
-    original_do_ingest = ingest_module._do_ingest
+    real_error = DBAPIError(
+        "INSERT INTO policy_versions (policy_id) VALUES (gen_random_uuid())",
+        {},
+        Exception("policy_versions_policy_id_fkey"),
+    )
 
-    async def _fail_on_the_locking_session(session, *_args, **_kwargs):
-        """Abort the transaction on the session that owns the advisory lock."""
-        await session.execute(
-            text(
-                "INSERT INTO policy_versions "
-                "(version_id, policy_id, version, effective_from, source_hash) "
-                "VALUES (gen_random_uuid(), gen_random_uuid(), 'boom', now(), 'h')"
-            )
-        )
-        await session.commit()  # the flush above already aborted the transaction
-        return 0
+    mock_pipeline = MagicMock()
+    mock_pipeline.run = AsyncMock(side_effect=real_error)
+    mock_source = MagicMock()
 
-    ingest_module._do_ingest = _fail_on_the_locking_session  # type: ignore[assignment]
-
-    try:
+    with (
+        patch.object(ingest_module, "IngestionPipeline", return_value=mock_pipeline),
+        patch.object(ingest_module, "FileDocumentSource", return_value=mock_source),
+        patch.object(ingest_module, "get_vector_store"),
+        patch.object(ingest_module, "EmbeddingFactory"),
+    ):
         with pytest.raises(DBAPIError) as excinfo:
             await ingest_module.ingest_policy()
-    finally:
-        ingest_module._do_ingest = original_do_ingest  # type: ignore[assignment]
 
     message = str(excinfo.value)
-    assert "current transaction is aborted" not in message, (
-        "the advisory-lock cleanup masked the real ingestion error: " + message
+    # The originating constraint violation reaches the caller unchanged...
+    assert excinfo.value is real_error, (
+        "expected the originating error to reach the caller, got: " + message
     )
     assert "policy_versions_policy_id_fkey" in message, (
         "expected the originating constraint violation to reach the caller, got: " + message
+    )
+    # ...not a lock-cleanup error from an aborted transaction.
+    assert "current transaction is aborted" not in message, (
+        "the advisory-lock cleanup masked the real ingestion error: " + message
     )

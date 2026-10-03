@@ -1,20 +1,42 @@
 """
 Tests for versioned policy ingestion (Feature 15: document-version-model).
+
+The ingestion orchestration moved to ragkit (plan 04); the
+snapshot comparison that makes ingestion idempotent lives in
+``ragkit.ingestion`` and is tested in
+``libs/ragkit/tests/test_ingestion_pipeline.py``. These tests
+exercise the OmniCare ``PolicyVersionStore`` -- the
+``VersionStore`` implementation the adapter binds to the
+pipeline -- against the real test database.
 """
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
-from unittest.mock import AsyncMock, MagicMock, patch
-
 import pytest
+import pytest_asyncio
+from sqlalchemy import text
 
-from app.models.policy import Policy
-from app.models.policy_version import PolicyVersion
-from app.rag.ingest import ingest_policy
+from app.database import async_session_factory
+from app.rag.ingest import PolicyVersionStore
+from ragkit.ingestion import IngestionSnapshot
+
+_POLICY_TABLES = ("policy_chunks", "policy_versions", "policy_ingestion_meta", "policies")
 
 
-# --- Version model tests ---
+@pytest_asyncio.fixture
+async def clean_policy_tables():
+    """Delete policy rows before and after the test."""
+
+    async def _clear() -> None:
+        async with async_session_factory() as session:
+            for table in _POLICY_TABLES:
+                # Table names come from the fixed tuple above, never from test input.
+                await session.execute(text(f'DELETE FROM "{table}"'))  # noqa: S608
+            await session.commit()
+
+    await _clear()
+    yield
+    await _clear()
 
 
 def test_policy_version_effective_from_and_source_hash_non_null():
@@ -27,247 +49,116 @@ def test_policy_version_effective_from_and_source_hash_non_null():
     assert PV.__table__.c["source_hash"].nullable is False
 
 
-@pytest.mark.asyncio
-async def test_ingest_policy_creates_policy_and_version_when_missing(tmp_path):
-    """ingest_policy() creates Policy and PolicyVersion when none exist."""
-    md_file = tmp_path / "policy.md"
-    md_file.write_text("# Policy\n\nTest content.", encoding="utf-8")
-    file_content = md_file.read_text(encoding="utf-8")
-
-    chunks = [
-        {
-            "id": "chunk_1",
-            "text": "test policy text",
-            "metadata": {
-                "section": "Test",
-                "source": "policy.md",
-                "chunk_index": 0,
-                "sub_chunk_index": 0,
-            },
-        }
-    ]
-    mock_store = AsyncMock()
-    mock_store.count.return_value = 0
-
-    with (
-        patch("app.rag.ingest.get_vector_store", return_value=mock_store),
-        patch("app.rag.ingest.chunk_policy_document", return_value=chunks),
-        patch("app.rag.ingest.EmbeddingFactory.get_embedding_function") as mock_embed,
-        patch("app.rag.ingest.async_session_factory") as mock_session_factory,
-        patch("app.rag.ingest.hashlib.sha256") as mock_sha,
-        patch(
-            "builtins.open",
-            MagicMock(
-                return_value=MagicMock(
-                    __enter__=MagicMock(
-                        return_value=MagicMock(read=MagicMock(return_value=file_content))
-                    )
-                )
-            ),
-        ),
-    ):
-        mock_sha.return_value.hexdigest.return_value = "newhash123"
-        mock_embed.return_value = AsyncMock(return_value=[[0.1] * 1536 for _ in chunks])
-
-        mock_session = AsyncMock()
-        mock_policy_result = MagicMock()
-        mock_policy_result.scalar_one_or_none.return_value = None
-        mock_version_result = MagicMock()
-        mock_version_result.scalar_one_or_none.return_value = None
-
-        def make_execute_result(*args, **kwargs):
-            result = MagicMock()
-            query_str = str(args[0]) if args else ""
-            if (
-                "SELECT" in query_str
-                and "policies" in query_str
-                or "SELECT" in query_str
-                and "policy_versions" in query_str
-            ):
-                result.scalar_one_or_none.return_value = None
-            elif "pg_advisory" in query_str:
-                result.scalar_one.return_value = 0
-            elif "DELETE" in query_str:
-                result.rowcount = 0
-            else:
-                result.mappings.return_value.first.return_value = None
-            return result
-
-        mock_session.execute.side_effect = make_execute_result
-        mock_session.flush = AsyncMock()
-        mock_session_factory.return_value.__aenter__.return_value = mock_session
-
-        count = await ingest_policy(policy_path=str(md_file))
-        assert count == len(chunks)
-        mock_store.upsert.assert_called_once()
-        # upsert is called with positional arg: await store.upsert(chunks, session=session)
-        upserted_chunks = mock_store.upsert.call_args[0][0]
-        # The vector store derives its INSERT column list from document["metadata"] only,
-        # so ownership must be nested there. Asserting it at the top level would lock in
-        # the bug where policy_chunks.policy_id was silently left NULL.
-        assert all("policy_id" in c["metadata"] for c in upserted_chunks)
-        assert all("policy_version_id" in c["metadata"] for c in upserted_chunks)
+def _snapshot(source_hash: str) -> IngestionSnapshot:
+    return IngestionSnapshot(
+        source_hash=source_hash,
+        embedding_model="text-embedding-3-small",
+        embedding_dim=1536,
+        chunker_version="v1",
+        chunk_size=600,
+        overlap=100,
+        retrieval_schema_version="v1",
+    )
 
 
 @pytest.mark.asyncio
-async def test_ingest_policy_skips_when_hash_unchanged(tmp_path):
-    """ingest_policy() skips ingestion when the active version's hash matches."""
-    md_file = tmp_path / "policy.md"
-    md_file.write_text("# Policy\n\nTest content.", encoding="utf-8")
-    file_content = md_file.read_text(encoding="utf-8")
+async def test_store_creates_policy_and_version_when_missing(clean_policy_tables):
+    """create_version() creates the Policy and PolicyVersion when none exist."""
+    store = PolicyVersionStore()
 
-    mock_store = AsyncMock()
-    mock_store.count.return_value = 5
+    async with async_session_factory() as session:
+        record = await store.create_version(session, _snapshot("hash-1"))
+        await session.commit()
 
-    with (
-        patch("app.rag.ingest.get_vector_store", return_value=mock_store),
-        patch("app.rag.ingest.async_session_factory") as mock_session_factory,
-        patch("app.rag.ingest.hashlib.sha256") as mock_sha,
-        patch(
-            "builtins.open",
-            MagicMock(
-                return_value=MagicMock(
-                    __enter__=MagicMock(
-                        return_value=MagicMock(read=MagicMock(return_value=file_content))
+        policies = (
+            (await session.execute(text("SELECT product, jurisdiction FROM policies")))
+            .mappings()
+            .all()
+        )
+        versions = (
+            (
+                await session.execute(
+                    text(
+                        "SELECT source_hash, embedding_model, embedding_dim, "
+                        "chunker_version, chunk_size, overlap, retrieval_schema_version "
+                        "FROM policy_versions"
                     )
                 )
-            ),
-        ),
-    ):
-        mock_sha.return_value.hexdigest.return_value = "storedhash"
-        mock_session = AsyncMock()
-        existing_policy = Policy(
-            policy_id="00000000-0000-0000-0000-000000000001",
-            product="omnicare_base",
-            jurisdiction="US",
-            is_active=True,
-        )
-        old_version = PolicyVersion(
-            version_id="00000000-0000-0000-0000-000000000002",
-            policy_id="00000000-0000-0000-0000-000000000001",
-            version="current",
-            effective_from=datetime(2026, 9, 1, tzinfo=UTC),
-            effective_to=None,
-            source_hash="storedhash",
-            embedding_model="text-embedding-3-small",
-            embedding_dim=1536,
-            chunker_version="v1",
-            chunk_size=600,
-            overlap=100,
-            retrieval_schema_version="v1",
+            )
+            .mappings()
+            .all()
         )
 
-        def make_execute_result(*args, **kwargs):
-            result = MagicMock()
-            query_str = str(args[0]) if args else ""
-            if "SELECT" in query_str and "policies" in query_str:
-                result.scalar_one_or_none.return_value = existing_policy
-            elif "SELECT" in query_str and "policy_versions" in query_str:
-                result.scalar_one_or_none.return_value = old_version
-            elif "pg_advisory" in query_str:
-                result.scalar_one.return_value = 0
-            elif "SELECT" in query_str and "COUNT" in query_str:
-                result.scalar_one.return_value = 5
-            else:
-                result.mappings.return_value.first.return_value = None
-            return result
-
-        mock_session.execute.side_effect = make_execute_result
-        mock_session_factory.return_value.__aenter__.return_value = mock_session
-
-        count = await ingest_policy(policy_path=str(md_file))
-        assert count == 5
-        mock_store.upsert.assert_not_called()
+    assert policies == [{"product": "omnicare_base", "jurisdiction": "US"}]
+    assert len(versions) == 1
+    version = versions[0]
+    assert version["source_hash"] == "hash-1"
+    assert version["embedding_model"] == "text-embedding-3-small"
+    assert version["embedding_dim"] == 1536
+    assert version["chunker_version"] == "v1"
+    assert version["chunk_size"] == 600
+    assert version["overlap"] == 100
+    assert version["retrieval_schema_version"] == "v1"
+    assert record.version_id
+    assert record.source_id
 
 
 @pytest.mark.asyncio
-async def test_ingest_policy_closes_old_version_and_creates_new(tmp_path):
-    """ingest_policy() closes the old version and creates a new one when hash changes."""
-    md_file = tmp_path / "policy.md"
-    md_file.write_text("# Policy\n\nChanged content.", encoding="utf-8")
-    file_content = md_file.read_text(encoding="utf-8")
+async def test_store_find_active_returns_the_stored_snapshot(clean_policy_tables):
+    """find_active() returns the active version's snapshot.
 
-    chunks = [
-        {
-            "id": "chunk_1",
-            "text": "test policy text",
-            "metadata": {
-                "section": "Test",
-                "source": "policy.md",
-                "chunk_index": 0,
-                "sub_chunk_index": 0,
-            },
-        }
-    ]
-    mock_store = AsyncMock()
-    mock_store.count.return_value = 0
+    The pipeline compares this snapshot against the current one
+    to decide whether the source changed (the "skip when the
+    hash is unchanged" decision); the comparison itself is
+    tested in ragkit.
+    """
+    store = PolicyVersionStore()
 
-    with (
-        patch("app.rag.ingest.get_vector_store", return_value=mock_store),
-        patch("app.rag.ingest.chunk_policy_document", return_value=chunks),
-        patch("app.rag.ingest.EmbeddingFactory.get_embedding_function") as mock_embed,
-        patch("app.rag.ingest.async_session_factory") as mock_session_factory,
-        patch("app.rag.ingest.hashlib.sha256") as mock_sha,
-        patch("app.rag.ingest.datetime") as mock_dt,
-        patch(
-            "builtins.open",
-            MagicMock(
-                return_value=MagicMock(
-                    __enter__=MagicMock(
-                        return_value=MagicMock(read=MagicMock(return_value=file_content))
+    async with async_session_factory() as session:
+        created = await store.create_version(session, _snapshot("hash-1"))
+        await session.commit()
+
+        active = await store.find_active(session)
+
+    assert active is not None
+    assert active.version_id == created.version_id
+    assert active.source_id == created.source_id
+    assert active.snapshot.source_hash == "hash-1"
+    assert active.snapshot.embedding_model == "text-embedding-3-small"
+    assert active.snapshot.embedding_dim == 1536
+    assert active.snapshot.chunker_version == "v1"
+    assert active.snapshot.chunk_size == 600
+    assert active.snapshot.overlap == 100
+    assert active.snapshot.retrieval_schema_version == "v1"
+
+
+@pytest.mark.asyncio
+async def test_store_closes_old_version_and_creates_new(clean_policy_tables):
+    """close_active() retires the old version; create_version() adds a new active one."""
+    store = PolicyVersionStore()
+
+    async with async_session_factory() as session:
+        old = await store.create_version(session, _snapshot("hash-old"))
+        await store.close_active(session)
+        new = await store.create_version(session, _snapshot("hash-new"))
+        await session.commit()
+
+        rows = (
+            (
+                await session.execute(
+                    text(
+                        "SELECT version_id, source_hash, effective_to "
+                        "FROM policy_versions ORDER BY effective_from"
                     )
                 )
-            ),
-        ),
-    ):
-        fake_now = datetime(2026, 10, 2, 12, 0, 0, tzinfo=UTC)
-        mock_dt.now.return_value = fake_now
-        mock_sha.return_value.hexdigest.return_value = "newhash456"
-        mock_embed.return_value = AsyncMock(return_value=[[0.1] * 1536 for _ in chunks])
-
-        mock_session = AsyncMock()
-        existing_policy = Policy(
-            policy_id="00000000-0000-0000-0000-000000000001",
-            product="omnicare_base",
-            jurisdiction="US",
-            is_active=True,
-        )
-        old_version = PolicyVersion(
-            version_id="00000000-0000-0000-0000-000000000002",
-            policy_id="00000000-0000-0000-0000-000000000001",
-            version="current",
-            effective_from=datetime(2026, 9, 1, tzinfo=UTC),
-            effective_to=None,
-            source_hash="oldhash",
+            )
+            .mappings()
+            .all()
         )
 
-        def make_execute_result(*args, **kwargs):
-            result = MagicMock()
-            query_str = str(args[0]) if args else ""
-            if "SELECT" in query_str and "policies" in query_str:
-                result.scalar_one_or_none.return_value = existing_policy
-            elif "SELECT" in query_str and "policy_versions" in query_str:
-                result.scalar_one_or_none.return_value = old_version
-            elif "pg_advisory" in query_str:
-                result.scalar_one.return_value = 0
-            elif "DELETE" in query_str:
-                result.rowcount = 0
-            else:
-                result.mappings.return_value.first.return_value = None
-            return result
-
-        mock_session.execute.side_effect = make_execute_result
-        mock_session.flush = AsyncMock()
-        mock_session_factory.return_value.__aenter__.return_value = mock_session
-
-        count = await ingest_policy(policy_path=str(md_file))
-        assert count == len(chunks)
-        assert old_version.effective_to == fake_now
-        mock_store.upsert.assert_called_once()
-        # upsert is called with positional arg: await store.upsert(chunks, session=session)
-        upserted_chunks = mock_store.upsert.call_args[0][0]
-        # The vector store derives its INSERT column list from document["metadata"] only,
-        # so ownership must be nested there. Asserting it at the top level would lock in
-        # the bug where policy_chunks.policy_id was silently left NULL.
-        assert all("policy_id" in c["metadata"] for c in upserted_chunks)
-        assert all("policy_version_id" in c["metadata"] for c in upserted_chunks)
+    assert len(rows) == 2
+    by_hash = {row["source_hash"]: row for row in rows}
+    assert by_hash["hash-old"]["effective_to"] is not None
+    assert by_hash["hash-new"]["effective_to"] is None
+    assert str(by_hash["hash-old"]["version_id"]) == old.version_id
+    assert str(by_hash["hash-new"]["version_id"]) == new.version_id
