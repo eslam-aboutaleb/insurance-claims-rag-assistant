@@ -268,6 +268,7 @@ class ClaimJobProcessor:
         """Embed the claim text and upsert it into the claims vector store."""
         from sqlalchemy import select  # noqa: PLC0415
 
+        from app.domain.claims.retriever import CLAIMS_RETRIEVER_SPEC  # noqa: PLC0415
         from app.models.claim import Claim  # noqa: PLC0415
         from app.rag.embedding import EmbeddingFactory  # noqa: PLC0415
         from app.rag.vector_store import get_vector_store  # noqa: PLC0415
@@ -286,7 +287,10 @@ class ClaimJobProcessor:
         embeddings = await embed_fn([text_content])
         embedding = embeddings[0]
 
-        store = get_vector_store(table_name="claims", id_field="id")
+        store = get_vector_store(
+            table_name=CLAIMS_RETRIEVER_SPEC.table_name,
+            id_field=CLAIMS_RETRIEVER_SPEC.id_field,
+        )
         await store.upsert(
             documents=[
                 {

@@ -1,5 +1,11 @@
 """
-Tests for app.agent.tools.search_claims module.
+Tests for app.domain.claims.tools module.
+
+Moved from tests/test_search_claims.py (ragkit plan 06):
+the tool moved to the domain adapter, so the patches
+target ``app.domain.claims.tools``. The ``current_user_id``
+ContextVar is resolved at call time inside the tool, so
+the unauthorized test patches ``app.agent.context``.
 """
 
 import uuid
@@ -8,12 +14,12 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from app.agent.context import current_user_id
-from app.agent.tools.search_claims import search_claims
+from app.domain.claims.tools import search_claims
 
 
 @pytest.mark.asyncio
 async def test_search_claims_unauthorized():
-    with patch("app.agent.tools.search_claims.current_user_id") as mock_ctx:
+    with patch("app.agent.context.current_user_id") as mock_ctx:
         mock_ctx.get.side_effect = LookupError
 
         result = await search_claims("water damage")
@@ -26,7 +32,7 @@ async def test_search_claims_no_results():
     current_user_id.set(uuid.uuid4())
 
     with patch(
-        "app.agent.tools.search_claims.retrieve_claims_hybrid", new_callable=AsyncMock
+        "app.domain.claims.tools.retrieve_claims_hybrid", new_callable=AsyncMock
     ) as mock_retrieve:
         mock_retrieve.return_value = []
 
@@ -40,7 +46,7 @@ async def test_search_claims_error_path():
     current_user_id.set(uuid.uuid4())
 
     with patch(
-        "app.agent.tools.search_claims.retrieve_claims_hybrid", new_callable=AsyncMock
+        "app.domain.claims.tools.retrieve_claims_hybrid", new_callable=AsyncMock
     ) as mock_retrieve:
         mock_retrieve.side_effect = RuntimeError("Search failed")
 
@@ -62,7 +68,7 @@ async def test_search_claims_success():
     ]
 
     with patch(
-        "app.agent.tools.search_claims.retrieve_claims_hybrid", new_callable=AsyncMock
+        "app.domain.claims.tools.retrieve_claims_hybrid", new_callable=AsyncMock
     ) as mock_retrieve:
         mock_retrieve.return_value = mock_results
 

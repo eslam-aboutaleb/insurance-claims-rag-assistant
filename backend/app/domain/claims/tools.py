@@ -1,17 +1,15 @@
 """
-Deprecated shim for the claims search tool.
+Claims search tool for the OmniCare AI agent.
 
-The ``search_claims`` tool moved to
-:mod:`app.domain.claims.tools` (ragkit
-plan 06). The function body stays here until
-plan 07 removes the shim so the historical
-patch point
-(``app.agent.tools.search_claims.retrieve_claims_hybrid``)
-keeps working for callers and tests that
-still import this module.
+This tool allows the AI agent to search through a user's
+claims using hybrid search (vector similarity + PostgreSQL
+full-text search) to answer questions about claim status,
+claim history, etc.
 
-.. deprecated::
-    Use :mod:`app.domain.claims.tools` instead.
+The tool is implemented as a plain async function that the
+agent registry can call directly. It uses the domain adapter
+``app.domain.claims.retriever`` for retrieval, which always
+scopes the search to the authenticated user.
 """
 
 from __future__ import annotations
@@ -19,7 +17,6 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from app.agent.context import current_user_id
 from app.domain.claims.retriever import retrieve_claims_hybrid
 
 logger = logging.getLogger(__name__)
@@ -28,10 +25,6 @@ logger = logging.getLogger(__name__)
 async def search_claims(query: str, n_results: int = 5) -> list[dict[str, Any]]:
     """
     Search claims using hybrid search (vector + keyword).
-
-    .. deprecated::
-        Use :func:`app.domain.claims.tools.search_claims`
-        instead. This shim remains until plan 07 removes it.
 
     Use this tool when the user asks about their claims,
     claim status, claim history, or any question that
@@ -59,7 +52,21 @@ async def search_claims(query: str, n_results: int = 5) -> list[dict[str, Any]]:
             - User is not authenticated (returns unauthorized error)
             - No results found (returns message)
             - Search fails (returns error message)
+
+    Examples:
+        >>> # Search for claim status
+        >>> results = await search_claims("water damage claim status")
+        >>> if results and "error" not in results[0]:
+        ...     print(f"Found {len(results)} claims")
+        ...     for r in results:
+        ...         print(f"Claim: {r['metadata']['claim_id']}")
+        ...         print(f"Status: {r['metadata']['status']}")
     """
+    # Resolved at call time so importing this module never
+    # cycles through app.agent (the agent imports this tool
+    # at module level).
+    from app.agent.context import current_user_id  # noqa: PLC0415
+
     try:
         user_uuid = current_user_id.get()
     except LookupError:

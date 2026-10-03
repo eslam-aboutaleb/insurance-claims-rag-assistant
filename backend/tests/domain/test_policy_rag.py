@@ -1,18 +1,22 @@
 """
-Tests for app.agent.tools.policy_rag module.
+Tests for app.domain.policies.tools module.
+
+Moved from tests/test_policy_rag.py (ragkit plan 06):
+the tool moved to the domain adapter, so the patches
+target ``app.domain.policies.tools``.
 """
 
 from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from app.agent.tools.policy_rag import query_policy
+from app.domain.policies.tools import query_policy
 
 
 @pytest.mark.asyncio
 async def test_query_policy_returns_empty_when_no_results():
     with patch(
-        "app.agent.tools.policy_rag.retrieve_hybrid", new_callable=AsyncMock
+        "app.domain.policies.tools.retrieve_hybrid", new_callable=AsyncMock
     ) as mock_retrieve:
         mock_retrieve.return_value = []
 
@@ -51,7 +55,7 @@ async def test_query_policy_returns_results_with_metadata():
     ]
 
     with patch(
-        "app.agent.tools.policy_rag.retrieve_hybrid", new_callable=AsyncMock
+        "app.domain.policies.tools.retrieve_hybrid", new_callable=AsyncMock
     ) as mock_retrieve:
         mock_retrieve.return_value = mock_results
 
@@ -67,6 +71,7 @@ async def test_query_policy_returns_results_with_metadata():
 
 @pytest.mark.asyncio
 async def test_query_policy_deduplicates_sections():
+    """The sources list deduplicates by section (frozen sources format)."""
     mock_results = [
         {
             "document": "Water damage coverage part 1.",
@@ -83,7 +88,7 @@ async def test_query_policy_deduplicates_sections():
     ]
 
     with patch(
-        "app.agent.tools.policy_rag.retrieve_hybrid", new_callable=AsyncMock
+        "app.domain.policies.tools.retrieve_hybrid", new_callable=AsyncMock
     ) as mock_retrieve:
         mock_retrieve.return_value = mock_results
 
@@ -108,7 +113,7 @@ async def test_query_policy_handles_missing_metadata():
     ]
 
     with patch(
-        "app.agent.tools.policy_rag.retrieve_hybrid", new_callable=AsyncMock
+        "app.domain.policies.tools.retrieve_hybrid", new_callable=AsyncMock
     ) as mock_retrieve:
         mock_retrieve.return_value = mock_results
 

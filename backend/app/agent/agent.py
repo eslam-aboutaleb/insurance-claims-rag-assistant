@@ -28,10 +28,10 @@ from google.genai import types
 from app.agent.context import current_user_id
 from app.agent.prompts import SYSTEM_INSTRUCTION
 from app.agent.tools.claim_status import get_claim_status
-from app.agent.tools.policy_rag import query_policy
-from app.agent.tools.search_claims import search_claims
 from app.agent.tools.submit_claim import prepare_claim_submission
 from app.config import settings
+from app.domain.claims.tools import search_claims
+from app.domain.policies.tools import query_policy
 
 logger = logging.getLogger(__name__)
 

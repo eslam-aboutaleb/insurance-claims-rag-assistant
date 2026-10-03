@@ -1,4 +1,7 @@
-"""Coverage tests for app.agent.tools.policy_rag uncovered paths."""
+"""Coverage tests for app.domain.policies.tools uncovered paths.
+
+Moved from tests/test_policy_rag_coverage.py (ragkit plan 06).
+"""
 
 from __future__ import annotations
 
@@ -10,10 +13,10 @@ import pytest
 class TestPolicyRagTool:
     @pytest.mark.asyncio
     async def test_query_policy_returns_empty_on_no_context(self):
-        from app.agent.tools.policy_rag import query_policy
+        from app.domain.policies.tools import query_policy
 
         with patch(
-            "app.agent.tools.policy_rag.retrieve_hybrid", new_callable=AsyncMock
+            "app.domain.policies.tools.retrieve_hybrid", new_callable=AsyncMock
         ) as mock_retrieve:
             mock_retrieve.return_value = []
             result = await query_policy(query="coverage")
