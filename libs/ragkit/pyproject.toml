@@ -51,3 +51,10 @@ ignore = [
     "S108",
     "SIM117",
 ]
+# The pgvector store builds raw SQL with validated identifiers
+# (every identifier passes validate_identifier; every value is a
+# bound parameter). Same per-file exemption as the backend's
+# pre-extraction pgvector_store.py.
+"src/ragkit/stores/pgvector.py" = [
+    "S608",
+]

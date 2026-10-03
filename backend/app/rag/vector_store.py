@@ -1,65 +1,21 @@
 """
-Vector store abstraction for the OmniCare RAG subsystem.
+Re-export shim for the ragkit vector store abstraction.
 
-Defines the interface for hybrid retrieval (vector + PostgreSQL full-text search) operations,
-allowing different backends (pgvector, ChromaDB, etc.) to be swapped
-via configuration without changing the retriever or ingestion code.
+The ``VectorStore`` interface and the provider registry moved to
+``ragkit.stores`` (ragkit extraction plan 03). This module keeps
+the historical import path working until plan 07 removes the shims.
+
+The factory below delegates to the ragkit store registry and wires
+the OmniCare-specific dependencies (the app's session factory, the
+LiteLLM embedding function, and the configured embedding dimension)
+that ragkit, being domain-agnostic, cannot import itself.
 """
 
-from abc import ABC, abstractmethod
-from typing import Any
-
 from app.config import get_settings
-from app.rag.pgvector_store import PgVectorStore
-
-
-class VectorStore(ABC):
-    """Abstract interface for vector store operations."""
-
-    @abstractmethod
-    async def hybrid_search(
-        self,
-        query: str,
-        embedding: list[float],
-        n_results: int,
-        threshold: float,
-        **filters: Any,
-    ) -> list[dict[str, Any]]:
-        """Perform hybrid vector + PostgreSQL full-text search using Reciprocal Rank Fusion.
-
-        Args:
-            query: Natural language search query.
-            embedding: Query embedding vector.
-            n_results: Maximum number of results to return.
-            threshold: Maximum distance for vector search part.
-            **filters: Additional filters (e.g., owner_id for claims).
-
-        Returns:
-            List of result dicts with keys: document, metadata, distance, _rrf_score.
-        """
-        ...
-
-    @abstractmethod
-    async def count(self, **filters: Any) -> int:
-        """Count documents in the store.
-
-        Args:
-            **filters: Optional filters (e.g., owner_id for claims).
-
-        Returns:
-            Number of matching documents.
-        """
-        ...
-
-    @abstractmethod
-    async def upsert(self, documents: list[dict[str, Any]], **filters: Any) -> None:
-        """Upsert documents into the store.
-
-        Args:
-            documents: List of document dicts with keys: id, text, metadata, embedding.
-            **filters: Additional fields (e.g., owner_id for claims).
-        """
-        ...
+from app.database import async_session_factory
+from app.rag.embedding import EmbeddingFactory
+from app.rag.embedding_dimensions import get_embedding_dimension
+from ragkit.stores import VectorStore, get_vector_store as _ragkit_get_vector_store
 
 
 def get_vector_store(
@@ -72,14 +28,18 @@ def get_vector_store(
     Args:
         table_name: Name of the database table.
         id_field: Name of the ID column.
-        embedding_dim: Dimension of the embedding vectors.
+        embedding_dim: Dimension of the embedding vectors. Defaults
+            to the dimension configured for the active embedding model.
 
     Returns:
         Configured VectorStore instance based on provider setting.
     """
     settings = get_settings()
-    provider = getattr(settings, "vector_store_provider", "pgvector")
-
-    if provider == "pgvector":
-        return PgVectorStore(table_name=table_name, id_field=id_field, embedding_dim=embedding_dim)
-    raise ValueError(f"Unsupported vector store provider: {provider}")
+    return _ragkit_get_vector_store(
+        table_name=table_name,
+        id_field=id_field,
+        embedding_dim=(embedding_dim if embedding_dim is not None else get_embedding_dimension()),
+        settings=settings,
+        session_factory=async_session_factory,
+        embedding_fn=EmbeddingFactory.get_embedding_function(),
+    )

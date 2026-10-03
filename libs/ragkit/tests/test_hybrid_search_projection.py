@@ -1,6 +1,9 @@
 """
 Tests for the hybrid search SQL and the fields it returns.
 
+Moved from ``backend/tests/test_hybrid_search_projection.py``
+(ragkit extraction plan 03).
+
 The defect this pins down: the outer projection interpolated the metadata expression
 as ``f"{meta_coalesce},"``, so an empty ``metadata_fields`` produced
 ``AS document, , v.distance`` — a syntax error that the broad ``except`` in
@@ -8,11 +11,11 @@ as ``f"{meta_coalesce},"``, so an empty ``metadata_fields`` produced
 assembled as a list, and every result carries the row ``id`` and the keyword rank.
 """
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from app.rag.pgvector_store import PgVectorStore
+from ragkit.stores.pgvector import PgVectorStore
 
 
 def _mock_row(values: dict) -> MagicMock:
@@ -25,8 +28,6 @@ def _mock_row(values: dict) -> MagicMock:
 
 def _mocked_store(row: MagicMock) -> tuple[PgVectorStore, MagicMock]:
     """Return a store wired to a session whose single query returns ``row``."""
-    store = PgVectorStore(table_name="policy_chunks", id_field="chunk_id")
-
     session = AsyncMock()
     result = MagicMock()
     result.mappings.return_value.all.return_value = [row]
@@ -35,6 +36,12 @@ def _mocked_store(row: MagicMock) -> tuple[PgVectorStore, MagicMock]:
     factory = MagicMock()
     factory.return_value.__aenter__.return_value = session
     factory.return_value.__aexit__.return_value = False
+    store = PgVectorStore(
+        table_name="policy_chunks",
+        id_field="chunk_id",
+        embedding_dim=1536,
+        session_factory=factory,
+    )
     return store, factory
 
 
@@ -53,17 +60,16 @@ async def test_hybrid_search_without_metadata_fields_returns_rows():
             "rrf_score": 0.03,
         }
     )
-    store, factory = _mocked_store(row)
+    store, _factory = _mocked_store(row)
 
-    with patch("app.rag.pgvector_store.async_session_factory", factory):
-        results = await store.hybrid_search(
-            query="water damage",
-            embedding=[0.1] * 1536,
-            n_results=5,
-            threshold=1.3,
-            text_field="text",
-            metadata_fields=[],
-        )
+    results = await store.hybrid_search(
+        query="water damage",
+        embedding=[0.1] * 1536,
+        n_results=5,
+        threshold=1.3,
+        text_field="text",
+        metadata_fields=[],
+    )
 
     assert len(results) == 1
     assert results[0]["document"] == "water damage is covered"
@@ -82,17 +88,16 @@ async def test_hybrid_search_returns_id_and_keyword_score():
             "rrf_score": 0.03,
         }
     )
-    store, factory = _mocked_store(row)
+    store, _factory = _mocked_store(row)
 
-    with patch("app.rag.pgvector_store.async_session_factory", factory):
-        results = await store.hybrid_search(
-            query="burst pipes",
-            embedding=[0.1] * 1536,
-            n_results=5,
-            threshold=1.3,
-            text_field="text",
-            metadata_fields=["section"],
-        )
+    results = await store.hybrid_search(
+        query="burst pipes",
+        embedding=[0.1] * 1536,
+        n_results=5,
+        threshold=1.3,
+        text_field="text",
+        metadata_fields=["section"],
+    )
 
     assert len(results) == 1
     assert results[0]["id"] == "policy_chunk_7"
@@ -118,16 +123,20 @@ async def test_hybrid_search_projection_has_no_empty_element():
     factory.return_value.__aenter__.return_value = session
     factory.return_value.__aexit__.return_value = False
 
-    store = PgVectorStore(table_name="policy_chunks", id_field="chunk_id")
-    with patch("app.rag.pgvector_store.async_session_factory", factory):
-        await store.hybrid_search(
-            query="q",
-            embedding=[0.0] * 1536,
-            n_results=3,
-            threshold=1.3,
-            text_field="text",
-            metadata_fields=[],
-        )
+    store = PgVectorStore(
+        table_name="policy_chunks",
+        id_field="chunk_id",
+        embedding_dim=1536,
+        session_factory=factory,
+    )
+    await store.hybrid_search(
+        query="q",
+        embedding=[0.0] * 1536,
+        n_results=3,
+        threshold=1.3,
+        text_field="text",
+        metadata_fields=[],
+    )
 
     sql = captured["sql"]
     outer = sql.split("SELECT\n", 2)[-1].split("FROM vector_search")[0]
@@ -137,13 +146,10 @@ async def test_hybrid_search_projection_has_no_empty_element():
     assert "AS keyword_score" in outer
 
 
-@pytest.mark.asyncio
-async def test_embedding_dimension_defaults_to_configured_model():
-    """The store resolves its dimension from settings, not a hardcoded literal."""
-    from app.rag.embedding_dimensions import get_embedding_dimension
-
-    store = PgVectorStore(table_name="policy_chunks", id_field="chunk_id")
-    assert store.embedding_dim == get_embedding_dimension()
-
+def test_embedding_dimension_comes_from_the_constructor():
+    """The store takes its dimension from the constructor, not a hardcoded literal."""
     explicit = PgVectorStore(table_name="policy_chunks", embedding_dim=42)
     assert explicit.embedding_dim == 42
+
+    with pytest.raises(ValueError, match="embedding_dim"):
+        PgVectorStore(table_name="policy_chunks")
