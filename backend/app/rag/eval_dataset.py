@@ -1,5 +1,11 @@
 """
-Curated evaluation dataset for OmniCare RAG system.
+Curated evaluation dataset for the OmniCare RAG system.
+
+The dataset **types** (``EvalSample``, ``Difficulty``,
+``QuestionCategory``) live in ragkit (ragkit plan 05);
+the curated OmniCare sample data below is domain test
+data and stays in the application, constructing ragkit's
+``EvalSample`` objects.
 
 Contains labeled question-answer pairs grounded in the sample_policy.md document,
 with expected relevant sections and gold-standard answers for measuring both
@@ -15,41 +21,11 @@ Each entry includes:
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from enum import StrEnum
-from typing import Any
-
-
-class QuestionCategory(StrEnum):
-    """Categories of policy questions for stratified evaluation."""
-
-    COVERAGE = "coverage"
-    LIMITS = "limits"
-    EXCLUSIONS = "exclusions"
-    DEDUCTIBLES = "deductibles"
-    REQUIREMENTS = "requirements"
-    GENERAL = "general"
-
-
-class Difficulty(StrEnum):
-    """Difficulty levels for evaluation queries."""
-
-    EASY = "easy"
-    MEDIUM = "medium"
-    HARD = "hard"
-
-
-@dataclass
-class EvalSample:
-    """A single evaluation sample with query, expected retrieval, and gold answer."""
-
-    query: str
-    expected_sections: list[str]
-    gold_answer: str
-    category: QuestionCategory
-    difficulty: Difficulty
-    metadata: dict[str, Any] = field(default_factory=dict)
-
+from ragkit.evaluation.dataset import (
+    Difficulty,
+    EvalSample,
+    QuestionCategory,
+)
 
 # ---------------------------------------------------------------------------
 # Curated evaluation dataset grounded in sample_policy.md

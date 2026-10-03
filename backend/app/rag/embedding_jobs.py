@@ -1,13 +1,25 @@
 """
 Embedding job worker for the OmniCare backend.
 
-This module provides an outbox pattern for decoupling claim insertion from
-embedding generation. When a claim is submitted, a job is written to the
-``embedding_jobs`` table. A background worker picks up pending jobs, generates
+App-side adapter over ragkit's generic job outbox
+(ragkit plan 05): implements ragkit's
+:class:`~ragkit.jobs.outbox.EmbeddingJobStore`
+against the ``EmbeddingJob`` model and the
+:class:`~ragkit.jobs.outbox.JobProcessor` that
+embeds claim text and upserts it into the claims
+vector index. The claim-specific logic (the
+``Claim.amount`` lookup and the claims-table
+upsert) lives here, not in ragkit.
+
+This module provides an outbox pattern for
+decoupling claim insertion from embedding
+generation. When a claim is submitted, a job is
+written to the ``embedding_jobs`` table. A
+background worker picks up pending jobs, generates
 embeddings, and upserts them into the vector store.
 
-This prevents the claim submission path from being blocked by external
-embedding API latency or failures.
+This prevents the claim submission path from being
+blocked by external embedding API latency or failures.
 
 Invariant for anything that writes an ``embedding_jobs`` row
 ------------------------------------------------------------
@@ -33,42 +45,266 @@ from __future__ import annotations
 import logging
 import uuid
 from datetime import UTC, datetime, timedelta
-from typing import TYPE_CHECKING
+from typing import Any
 
-from sqlalchemy.ext.asyncio import AsyncSession
+from ragkit.jobs.outbox import (
+    JobPayload,
+    _claim_jobs,
+)
+from ragkit.jobs import (
+    enqueue_job as _ragkit_enqueue_job,
+    process_pending_jobs as _ragkit_process_pending_jobs,
+    reclaim_stale_jobs as _ragkit_reclaim_stale_jobs,
+)
 
 from app.database import async_session_factory
-from app.rag.embedding import EmbeddingFactory
-from app.rag.vector_store import get_vector_store
-
-if TYPE_CHECKING:
-    from app.models.embedding_job import EmbeddingJob
 
 logger = logging.getLogger(__name__)
 
-RETRY_SCHEDULE = [
-    timedelta(minutes=1),
-    timedelta(minutes=5),
-    timedelta(minutes=30),
-]
 MAX_ATTEMPTS = 4
 
 
-def _claim_jobs(jobs: list[EmbeddingJob], worker_id: str, now: datetime) -> None:
-    """Transition claimed jobs to ``processing`` and stamp the lock.
+def _payload_from_row(row: Any) -> JobPayload:
+    """Map an ``EmbeddingJob`` ORM row to a :class:`JobPayload`."""
+    return JobPayload(
+        job_id=str(row.id),
+        payload={
+            "claim_uuid": str(row.claim_uuid),
+            "claim_id": row.claim_id,
+            "owner_id": str(row.owner_id),
+            "claim_type": row.claim_type,
+            "description": row.description,
+            "policy_number": row.policy_number,
+            "claim_status": row.claim_status,
+        },
+        status=row.status,
+        status_detail=row.status_detail,
+        retry_count=row.retry_count,
+        max_attempts=row.max_attempts,
+        next_retry_at=row.next_retry_at,
+        locked_at=row.locked_at,
+        locked_by=row.locked_by,
+        created_at=row.created_at,
+        completed_at=row.completed_at,
+    )
 
-    A failed job is first reset to ``pending`` so its retry bookkeeping
-    starts clean; the lock columns then record which worker claimed it
-    and when, for ``reclaim_stale_jobs``.
-    """
-    for job in jobs:
-        if job.status == "failed":
-            job.status = "pending"
-            job.status_detail = None
-            job.next_retry_at = None
-        job.status = "processing"
-        job.locked_at = now
-        job.locked_by = worker_id
+
+class SqlAlchemyJobStore:
+    """ragkit ``EmbeddingJobStore`` implemented against ``embedding_jobs``."""
+
+    def __init__(self, session_factory: Any = None) -> None:
+        self._session_factory = session_factory or async_session_factory
+
+    async def claim_pending(self, limit: int, worker_id: str) -> list[JobPayload]:
+        """Select claimable jobs with ``FOR UPDATE SKIP LOCKED``."""
+        from sqlalchemy import select  # noqa: PLC0415
+
+        from app.models.embedding_job import EmbeddingJob  # noqa: PLC0415
+
+        now = datetime.now(UTC)
+        async with self._session_factory() as session:
+            result = await session.execute(
+                select(EmbeddingJob)
+                .where(
+                    (EmbeddingJob.status == "pending")
+                    | (
+                        (EmbeddingJob.status == "failed")
+                        & (EmbeddingJob.next_retry_at <= now)
+                        & (EmbeddingJob.retry_count < EmbeddingJob.max_attempts)
+                    )
+                )
+                .order_by(EmbeddingJob.created_at)
+                .limit(limit)
+                .with_for_update(skip_locked=True)
+            )
+            rows = result.scalars().all()
+        return [_payload_from_row(row) for row in rows]
+
+    async def mark_processing(self, jobs: list[JobPayload], worker_id: str) -> list[JobPayload]:
+        """Transition jobs to ``processing`` and stamp the lock.
+
+        The guarded update (``status IN ('pending', 'failed')``) keeps
+        two concurrent drainers from claiming the same row: only the
+        worker whose update matches still owns the job.
+        """
+        from sqlalchemy import update  # noqa: PLC0415
+
+        from app.models.embedding_job import EmbeddingJob  # noqa: PLC0415
+
+        if not jobs:
+            return []
+
+        now = datetime.now(UTC)
+        _claim_jobs(jobs, worker_id, now)
+
+        claimed: list[JobPayload] = []
+        async with self._session_factory() as session:
+            for job in jobs:
+                result = await session.execute(
+                    update(EmbeddingJob)
+                    .where(
+                        EmbeddingJob.id == uuid.UUID(str(job.job_id)),
+                        EmbeddingJob.status.in_(["pending", "failed"]),
+                    )
+                    .values(
+                        status=job.status,
+                        status_detail=job.status_detail,
+                        next_retry_at=job.next_retry_at,
+                        locked_at=job.locked_at,
+                        locked_by=job.locked_by,
+                    )
+                    .returning(EmbeddingJob.id)
+                )
+                if result.scalar() is not None:
+                    claimed.append(job)
+            await session.commit()
+        return claimed
+
+    async def mark_completed(self, job: JobPayload) -> None:
+        """Persist a successfully processed job as ``completed``."""
+        from sqlalchemy import update  # noqa: PLC0415
+
+        from app.models.embedding_job import EmbeddingJob  # noqa: PLC0415
+
+        async with self._session_factory() as session:
+            await session.execute(
+                update(EmbeddingJob)
+                .where(EmbeddingJob.id == uuid.UUID(str(job.job_id)))
+                .values(status=job.status, completed_at=job.completed_at)
+            )
+            await session.commit()
+
+    async def mark_failed(self, job: JobPayload, error: Exception) -> None:
+        """Persist a failed job's retry/dead-letter transition."""
+        from sqlalchemy import update  # noqa: PLC0415
+
+        from app.models.embedding_job import EmbeddingJob  # noqa: PLC0415
+
+        async with self._session_factory() as session:
+            await session.execute(
+                update(EmbeddingJob)
+                .where(EmbeddingJob.id == uuid.UUID(str(job.job_id)))
+                .values(
+                    status=job.status,
+                    status_detail=job.status_detail,
+                    retry_count=job.retry_count,
+                    next_retry_at=job.next_retry_at,
+                    locked_at=job.locked_at,
+                    locked_by=job.locked_by,
+                )
+            )
+            await session.commit()
+
+    async def reclaim_stale(self, stale_after_seconds: float | None = None) -> int:
+        """Reset jobs abandoned in ``processing`` back to ``pending``."""
+        from sqlalchemy import select  # noqa: PLC0415
+
+        from app.models.embedding_job import EmbeddingJob  # noqa: PLC0415
+
+        if stale_after_seconds is None:
+            from app.config import settings  # noqa: PLC0415
+
+            stale_after_seconds = settings.job_stale_after_seconds
+
+        cutoff = datetime.now(UTC) - timedelta(seconds=stale_after_seconds)
+        reclaimed = 0
+        async with self._session_factory() as session:
+            result = await session.execute(
+                select(EmbeddingJob)
+                .where(
+                    (EmbeddingJob.status == "processing")
+                    & (EmbeddingJob.locked_at.is_(None) | (EmbeddingJob.locked_at <= cutoff))
+                )
+                .with_for_update(skip_locked=True)
+            )
+            stale_jobs = result.scalars().all()
+            for job in stale_jobs:
+                job.status = "pending"
+                job.status_detail = None
+                job.locked_at = None
+                job.locked_by = None
+                reclaimed += 1
+            if reclaimed:
+                await session.commit()
+
+        if reclaimed:
+            logger.info("Reclaimed %d stale embedding job(s).", reclaimed)
+        return reclaimed
+
+    async def enqueue(self, payload: dict[str, Any], session: Any = None) -> None:
+        """Write a new pending ``embedding_jobs`` row.
+
+        When ``session`` is supplied the row is only added and flushed;
+        the caller owns the commit, so the job and the claim land in one
+        transaction. Without a session this opens its own session and
+        commits.
+        """
+        from app.models.embedding_job import EmbeddingJob  # noqa: PLC0415
+
+        job = EmbeddingJob(
+            claim_uuid=uuid.UUID(str(payload["claim_uuid"])),
+            claim_id=payload["claim_id"],
+            owner_id=uuid.UUID(str(payload["owner_id"])),
+            claim_type=payload["claim_type"],
+            description=payload["description"],
+            policy_number=payload["policy_number"],
+            claim_status=payload["claim_status"],
+            status="pending",
+            status_detail="pending",
+        )
+        if session is not None:
+            session.add(job)
+            await session.flush()
+        else:
+            async with self._session_factory() as owned_session:
+                owned_session.add(job)
+                await owned_session.commit()
+
+
+class ClaimJobProcessor:
+    """ragkit ``JobProcessor`` that embeds a claim and upserts its index entry."""
+
+    async def process(self, job: JobPayload) -> None:
+        """Embed the claim text and upsert it into the claims vector store."""
+        from sqlalchemy import select  # noqa: PLC0415
+
+        from app.models.claim import Claim  # noqa: PLC0415
+        from app.rag.embedding import EmbeddingFactory  # noqa: PLC0415
+        from app.rag.vector_store import get_vector_store  # noqa: PLC0415
+
+        payload = job.payload
+        claim_id = payload["claim_id"]
+
+        async with async_session_factory() as session:
+            claim_amount = await session.scalar(
+                select(Claim.amount).where(Claim.claim_id == claim_id)
+            )
+        claim_amount = claim_amount if claim_amount is not None else 0.0
+
+        embed_fn = EmbeddingFactory.get_embedding_function()
+        text_content = f"Claim {claim_id}: {payload['claim_type']} - {payload['description']}"
+        embeddings = await embed_fn([text_content])
+        embedding = embeddings[0]
+
+        store = get_vector_store(table_name="claims", id_field="id")
+        await store.upsert(
+            documents=[
+                {
+                    "id": payload["claim_uuid"],
+                    "text": text_content,
+                    "embedding": embedding,
+                    "metadata": {
+                        "claim_id": claim_id,
+                        "policy_number": payload["policy_number"],
+                        "claim_type": payload["claim_type"],
+                        "status": payload["claim_status"],
+                        "amount": float(claim_amount),
+                        "description": payload["description"],
+                        "owner_id": payload["owner_id"],
+                    },
+                }
+            ],
+        )
 
 
 async def enqueue_embedding_job(  # noqa: PLR0913, PLR0917
@@ -79,7 +315,7 @@ async def enqueue_embedding_job(  # noqa: PLR0913, PLR0917
     description: str,
     policy_number: str,
     claim_status: str,
-    session: AsyncSession | None = None,
+    session: Any = None,
 ) -> None:
     """Add an embedding job for a newly submitted claim.
 
@@ -100,27 +336,18 @@ async def enqueue_embedding_job(  # noqa: PLR0913, PLR0917
         claim_status: Current business status of the claim.
         session: Optional caller-owned session. Not committed when provided.
     """
-    from app.models.embedding_job import EmbeddingJob  # noqa: PLC0415
-
-    job = EmbeddingJob(
-        claim_uuid=claim_uuid,
-        claim_id=claim_id,
-        owner_id=owner_id,
-        claim_type=claim_type,
-        description=description,
-        policy_number=policy_number,
-        claim_status=claim_status,
-        status="pending",
-        status_detail="pending",
-    )
+    store = SqlAlchemyJobStore()
+    payload = {
+        "claim_uuid": str(claim_uuid),
+        "claim_id": claim_id,
+        "owner_id": str(owner_id),
+        "claim_type": claim_type,
+        "description": description,
+        "policy_number": policy_number,
+        "claim_status": claim_status,
+    }
     try:
-        if session is not None:
-            session.add(job)
-            await session.flush()
-        else:
-            async with async_session_factory() as owned_session:
-                owned_session.add(job)
-                await owned_session.commit()
+        await _ragkit_enqueue_job(store, payload, session=session)
         logger.info("Enqueued embedding job for claim '%s'.", claim_id)
     except Exception as exc:
         logger.exception("Failed to enqueue embedding job for claim '%s': %s", claim_id, exc)
@@ -145,99 +372,19 @@ async def process_pending_jobs(limit: int = 10, worker_id: str | None = None) ->
     Returns:
         int: Number of jobs successfully processed.
     """
-    from sqlalchemy import select  # noqa: PLC0415
-
     from app.config import settings  # noqa: PLC0415
-    from app.models.embedding_job import EmbeddingJob  # noqa: PLC0415
-
-    from app.models.claim import Claim  # noqa: PLC0415
 
     if worker_id is None:
         worker_id = settings.worker_id
 
-    processed = 0
-    async with async_session_factory() as session:
-        now = datetime.now(UTC)
-        result = await session.execute(
-            select(EmbeddingJob)
-            .where(
-                (EmbeddingJob.status == "pending")
-                | (
-                    (EmbeddingJob.status == "failed")
-                    & (EmbeddingJob.next_retry_at <= now)
-                    & (EmbeddingJob.retry_count < EmbeddingJob.max_attempts)
-                )
-            )
-            .order_by(EmbeddingJob.created_at)
-            .limit(limit)
-            .with_for_update(skip_locked=True)
-        )
-        jobs = result.scalars().all()
-
-        _claim_jobs(jobs, worker_id, now)
-        await session.commit()
-
-        for job in jobs:
-            try:
-                claim_amount = await session.scalar(
-                    select(Claim.amount).where(Claim.claim_id == job.claim_id)
-                )
-                claim_amount = claim_amount if claim_amount is not None else 0.0
-
-                embed_fn = EmbeddingFactory.get_embedding_function()
-                text_content = f"Claim {job.claim_id}: {job.claim_type} - {job.description}"
-                embeddings = await embed_fn([text_content])
-                embedding = embeddings[0]
-
-                store = get_vector_store(table_name="claims", id_field="id")
-                await store.upsert(
-                    documents=[
-                        {
-                            "id": str(job.claim_uuid),
-                            "text": text_content,
-                            "embedding": embedding,
-                            "metadata": {
-                                "claim_id": job.claim_id,
-                                "policy_number": job.policy_number,
-                                "claim_type": job.claim_type,
-                                "status": job.claim_status,
-                                "amount": float(claim_amount),
-                                "description": job.description,
-                                "owner_id": str(job.owner_id),
-                            },
-                        }
-                    ],
-                )
-
-                job.status = "completed"
-                job.completed_at = datetime.now(UTC)
-                await session.commit()
-                processed += 1
-                logger.info("Processed embedding job for claim '%s'.", job.claim_id)
-            except Exception as exc:
-                job.retry_count += 1
-                if job.retry_count >= job.max_attempts:
-                    job.status = "dead_letter"
-                    job.status_detail = f"Exhausted {job.max_attempts} attempts: {exc}"
-                    job.next_retry_at = None
-                    job.locked_at = None
-                    job.locked_by = None
-                else:
-                    backoff = RETRY_SCHEDULE[min(job.retry_count - 1, len(RETRY_SCHEDULE) - 1)]
-                    job.next_retry_at = datetime.now(UTC) + backoff
-                    job.status = "failed"
-                    job.status_detail = str(exc)
-                    job.locked_at = None
-                    job.locked_by = None
-                await session.commit()
-                logger.error(
-                    "Embedding job failed for claim '%s' (retry %d): %s",
-                    job.claim_id,
-                    job.retry_count,
-                    exc,
-                )
-
-    return processed
+    store = SqlAlchemyJobStore()
+    processor = ClaimJobProcessor()
+    return await _ragkit_process_pending_jobs(
+        store,
+        processor,
+        limit=limit,
+        worker_id=worker_id,
+    )
 
 
 async def reclaim_stale_jobs(stale_after_seconds: float | None = None) -> int:
@@ -258,35 +405,10 @@ async def reclaim_stale_jobs(stale_after_seconds: float | None = None) -> int:
     Returns:
         int: Number of jobs reclaimed.
     """
-    from sqlalchemy import select  # noqa: PLC0415
-
-    from app.config import settings  # noqa: PLC0415
-    from app.models.embedding_job import EmbeddingJob  # noqa: PLC0415
-
     if stale_after_seconds is None:
+        from app.config import settings  # noqa: PLC0415
+
         stale_after_seconds = settings.job_stale_after_seconds
 
-    cutoff = datetime.now(UTC) - timedelta(seconds=stale_after_seconds)
-    reclaimed = 0
-    async with async_session_factory() as session:
-        result = await session.execute(
-            select(EmbeddingJob)
-            .where(
-                (EmbeddingJob.status == "processing")
-                & (EmbeddingJob.locked_at.is_(None) | (EmbeddingJob.locked_at <= cutoff))
-            )
-            .with_for_update(skip_locked=True)
-        )
-        stale_jobs = result.scalars().all()
-        for job in stale_jobs:
-            job.status = "pending"
-            job.status_detail = None
-            job.locked_at = None
-            job.locked_by = None
-            reclaimed += 1
-        if reclaimed:
-            await session.commit()
-
-    if reclaimed:
-        logger.info("Reclaimed %d stale embedding job(s).", reclaimed)
-    return reclaimed
+    store = SqlAlchemyJobStore()
+    return await _ragkit_reclaim_stale_jobs(store, stale_after_seconds=stale_after_seconds)

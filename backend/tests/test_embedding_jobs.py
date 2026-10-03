@@ -1,309 +1,274 @@
 """
-Tests for embedding job retry behavior with exponential backoff and dead-letter state.
+Tests for the OmniCare embedding-job adapter over ragkit's
+outbox (ragkit plan 05).
+
+The retry/backoff/dead-letter engine itself is tested in
+``libs/ragkit/tests`` against in-memory doubles; these tests
+pin the OmniCare adapter: the ``SqlAlchemyJobStore`` mapping
+(claim query, guarded processing transition, completion and
+failure updates) and the ``ClaimJobProcessor`` (claim amount
+lookup, embedding text, vector-index metadata).
 """
+
+from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime, timedelta
-from unittest.mock import AsyncMock, MagicMock, patch
+from decimal import Decimal
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from app.rag.embedding_jobs import MAX_ATTEMPTS, RETRY_SCHEDULE, process_pending_jobs
+from app.database import async_session_factory
+from app.models.claim import Claim
+from app.models.embedding_job import EmbeddingJob
+from app.models.user import User
+from app.rag.embedding_jobs import process_pending_jobs
 
 
-def _make_job(**overrides):
-    defaults = {
-        "id": uuid.uuid4(),
-        "claim_id": "CLM-1",
-        "claim_uuid": uuid.uuid4(),
-        "owner_id": uuid.uuid4(),
-        "claim_type": "Water Damage",
-        "description": "Pipe burst",
-        "policy_number": "POL-1",
-        "claim_status": "Submitted",
-        "status": "pending",
-        "status_detail": "pending",
-        "retry_count": 0,
-        "next_retry_at": None,
-        "max_attempts": 4,
-        "created_at": datetime.now(UTC),
-        "completed_at": None,
-    }
-    defaults.update(overrides)
-    return defaults
+class _UpsertCapture:
+    """Vector-store double that records upserted documents."""
+
+    def __init__(self) -> None:
+        self.documents: list[dict] = []
+
+    async def upsert(self, documents, session=None):  # noqa: ANN001
+        self.documents.extend(documents)
 
 
-def _make_session(jobs):
-    mock_session = AsyncMock()
-    result = MagicMock()
-    result.scalars.return_value.all.return_value = jobs
-    mock_session.execute.return_value = result
-    mock_session.scalar.return_value = 0.0
-    mock_session.add = MagicMock()
-    mock_session.commit = AsyncMock()
-    return mock_session
+async def _seed_owner() -> uuid.UUID:
+    owner_id = uuid.uuid4()
+    async with async_session_factory() as session:
+        session.add(
+            User(
+                id=owner_id,
+                username=f"jobs_{owner_id.hex[:12]}",
+                password_hash="not-a-real-hash",  # noqa: S106 - fixture row
+            )
+        )
+        await session.commit()
+    return owner_id
+
+
+async def _seed_claim(owner_id: uuid.UUID, claim_id: str, amount: Decimal) -> None:
+    async with async_session_factory() as session:
+        session.add(
+            Claim(
+                claim_id=claim_id,
+                policy_number="POL-1092",
+                claim_type="Water Damage",
+                status="Submitted",
+                amount=amount,
+                description="Pipe burst causing kitchen flooding.",
+                owner_id=owner_id,
+            )
+        )
+        await session.commit()
+
+
+async def _seed_job(
+    owner_id: uuid.UUID,
+    claim_id: str,
+    *,
+    claim_status: str = "Submitted",
+    max_attempts: int = 4,
+) -> uuid.UUID:
+    job_id = uuid.uuid4()
+    async with async_session_factory() as session:
+        session.add(
+            EmbeddingJob(
+                id=job_id,
+                claim_id=claim_id,
+                claim_uuid=uuid.uuid4(),
+                owner_id=owner_id,
+                claim_type="Water Damage",
+                description="Pipe burst causing kitchen flooding.",
+                policy_number="POL-1092",
+                claim_status=claim_status,
+                status="pending",
+                status_detail="pending",
+                max_attempts=max_attempts,
+            )
+        )
+        await session.commit()
+    return job_id
+
+
+async def _job_row(job_id: uuid.UUID) -> EmbeddingJob:
+    async with async_session_factory() as session:
+        return await session.get(EmbeddingJob, job_id)
+
+
+async def _expire_retry_at(job_id: uuid.UUID) -> None:
+    """Roll a failed job's retry timestamp into the past."""
+    async with async_session_factory() as session:
+        job = await session.get(EmbeddingJob, job_id)
+        if job.next_retry_at is not None:
+            job.next_retry_at = datetime.now(UTC) - timedelta(seconds=1)
+        await session.commit()
+
+
+def _embed_ok() -> AsyncMock:
+    return AsyncMock(return_value=[[0.0] * 1536])
 
 
 @pytest.mark.asyncio
-async def test_failed_job_retries_with_backoff():
-    """Failing a job 3 times keeps it failed with a future next_retry_at."""
-    job = _make_job()
-    job_mock = MagicMock(**job)
-    mock_session = _make_session([job_mock])
-    embed_fn = AsyncMock(return_value=[[0.0] * 1536])
+async def test_process_pending_jobs_completes_and_upserts_claim_index_entry():
+    """A pending job is claimed, embedded, upserted, and marked completed."""
+    owner_id = await _seed_owner()
+    claim_id = f"CLM-{uuid.uuid4().hex[:8].upper()}"
+    await _seed_claim(owner_id, claim_id, Decimal("1234.50"))
+    job_id = await _seed_job(owner_id, claim_id)
 
+    capture = _UpsertCapture()
     with (
-        patch("app.rag.embedding_jobs.async_session_factory") as mock_factory,
         patch(
-            "app.rag.embedding_jobs.EmbeddingFactory.get_embedding_function", return_value=embed_fn
+            "app.rag.embedding.EmbeddingFactory.get_embedding_function",
+            return_value=_embed_ok(),
         ),
-        patch("app.rag.embedding_jobs.get_vector_store", return_value=AsyncMock()),
+        patch("app.rag.vector_store.get_vector_store", return_value=capture),
     ):
-        mock_factory.return_value.__aenter__.return_value = mock_session
-
-        for _ in range(3):
-            embed_fn.side_effect = [Exception("embed error")]
-            await process_pending_jobs(limit=10)
-
-    assert job_mock.status == "failed"
-    assert job_mock.retry_count == 3
-    assert job_mock.next_retry_at is not None
-    assert job_mock.next_retry_at > datetime.now(UTC)
-
-
-@pytest.mark.asyncio
-async def test_failed_job_moves_to_dead_letter_after_max_attempts():
-    """Failing a job 4 times moves it to dead_letter."""
-    job = _make_job()
-    job_mock = MagicMock(**job)
-    mock_session = _make_session([job_mock])
-    embed_fn = AsyncMock(return_value=[[0.0] * 1536])
-
-    with (
-        patch("app.rag.embedding_jobs.async_session_factory") as mock_factory,
-        patch(
-            "app.rag.embedding_jobs.EmbeddingFactory.get_embedding_function", return_value=embed_fn
-        ),
-        patch("app.rag.embedding_jobs.get_vector_store", return_value=AsyncMock()),
-    ):
-        mock_factory.return_value.__aenter__.return_value = mock_session
-
-        for _ in range(4):
-            embed_fn.side_effect = [Exception("embed error")]
-            await process_pending_jobs(limit=10)
-
-    assert job_mock.status == "dead_letter"
-    assert job_mock.retry_count == 4
-    assert job_mock.next_retry_at is None
-    assert "Exhausted 4 attempts" in job_mock.status_detail
-
-
-@pytest.mark.asyncio
-async def test_retriable_failed_job_is_processed_after_backoff():
-    """A failed job whose next_retry_at has passed is retried and can succeed."""
-    past_time = datetime.now(UTC) - timedelta(minutes=2)
-    job = _make_job(
-        status="failed",
-        retry_count=1,
-        next_retry_at=past_time,
-        max_attempts=4,
-    )
-    job_mock = MagicMock(**job)
-    mock_session = _make_session([job_mock])
-    embed_fn = AsyncMock(return_value=[[0.0] * 1536])
-
-    with (
-        patch("app.rag.embedding_jobs.async_session_factory") as mock_factory,
-        patch(
-            "app.rag.embedding_jobs.EmbeddingFactory.get_embedding_function", return_value=embed_fn
-        ),
-        patch("app.rag.embedding_jobs.get_vector_store", return_value=AsyncMock()),
-    ):
-        mock_factory.return_value.__aenter__.return_value = mock_session
-        processed = await process_pending_jobs(limit=10)
+        processed = await process_pending_jobs(limit=10, worker_id="worker-1")
 
     assert processed == 1
-    assert job_mock.status == "completed"
+    job = await _job_row(job_id)
+    assert job.status == "completed"
+    assert job.completed_at is not None
+    assert job.locked_by == "worker-1"
+    assert job.locked_at is not None
 
-
-@pytest.mark.asyncio
-async def test_dead_letter_job_is_never_selected():
-    """A dead_letter job is never picked up by the worker."""
-    mock_session = _make_session([])
-
-    with (
-        patch("app.rag.embedding_jobs.async_session_factory") as mock_factory,
-    ):
-        mock_factory.return_value.__aenter__.return_value = mock_session
-        processed = await process_pending_jobs(limit=10)
-
-    assert processed == 0
-    mock_session.add.assert_not_called()
-
-
-@pytest.mark.asyncio
-async def test_retry_schedule_constants():
-    """Retry schedule has the expected number of intervals and MAX_ATTEMPTS matches."""
-    assert len(RETRY_SCHEDULE) == MAX_ATTEMPTS - 1
-    assert RETRY_SCHEDULE[0] == timedelta(minutes=1)
-    assert RETRY_SCHEDULE[1] == timedelta(minutes=5)
-    assert RETRY_SCHEDULE[2] == timedelta(minutes=30)
+    assert len(capture.documents) == 1
+    document = capture.documents[0]
+    assert document["text"] == (
+        f"Claim {claim_id}: Water Damage - Pipe burst causing kitchen flooding."
+    )
+    assert document["metadata"]["claim_id"] == claim_id
+    assert document["metadata"]["status"] == "Submitted"
+    assert document["metadata"]["amount"] == 1234.50
+    assert document["metadata"]["owner_id"] == str(owner_id)
 
 
 @pytest.mark.asyncio
 async def test_process_pending_jobs_uses_claim_status_in_metadata():
-    """process_pending_jobs() stores job.claim_status in vector index metadata, not job.status."""
-    job = _make_job(claim_status="Denied")
-    job_mock = MagicMock(**job)
-    mock_session = _make_session([job_mock])
-    embed_fn = AsyncMock(return_value=[[0.0] * 1536])
-    captured_metadata = {}
+    """The upserted metadata carries the claim's business status, not the job's."""
+    owner_id = await _seed_owner()
+    claim_id = f"CLM-{uuid.uuid4().hex[:8].upper()}"
+    await _seed_claim(owner_id, claim_id, Decimal("0"))
+    job_id = await _seed_job(owner_id, claim_id, claim_status="Denied")
 
-    async def fake_upsert(documents, session=None):
-        captured_metadata.update(documents[0]["metadata"])
-
-    mock_store = AsyncMock()
-    mock_store.upsert.side_effect = fake_upsert
-
+    capture = _UpsertCapture()
     with (
-        patch("app.rag.embedding_jobs.async_session_factory") as mock_factory,
         patch(
-            "app.rag.embedding_jobs.EmbeddingFactory.get_embedding_function", return_value=embed_fn
+            "app.rag.embedding.EmbeddingFactory.get_embedding_function",
+            return_value=_embed_ok(),
         ),
-        patch("app.rag.embedding_jobs.get_vector_store", return_value=mock_store),
+        patch("app.rag.vector_store.get_vector_store", return_value=capture),
     ):
-        mock_factory.return_value.__aenter__.return_value = mock_session
-        processed = await process_pending_jobs(limit=10)
-
-    assert processed == 1
-    assert captured_metadata["status"] == "Denied"
-
-
-@pytest.mark.asyncio
-async def test_claimed_jobs_are_stamped_with_lock_fields():
-    """Claimed jobs record which worker took them and when."""
-    job = _make_job()
-    job_mock = MagicMock(**job)
-    mock_session = _make_session([job_mock])
-    embed_fn = AsyncMock(return_value=[[0.0] * 1536])
-
-    with (
-        patch("app.rag.embedding_jobs.async_session_factory") as mock_factory,
-        patch(
-            "app.rag.embedding_jobs.EmbeddingFactory.get_embedding_function", return_value=embed_fn
-        ),
-        patch("app.rag.embedding_jobs.get_vector_store", return_value=AsyncMock()),
-    ):
-        mock_factory.return_value.__aenter__.return_value = mock_session
         await process_pending_jobs(limit=10, worker_id="worker-1")
 
-    assert job_mock.status == "completed"
-    assert job_mock.locked_by == "worker-1"
-    assert job_mock.locked_at is not None
+    job = await _job_row(job_id)
+    assert job.status == "completed"
+    assert capture.documents[0]["metadata"]["status"] == "Denied"
 
 
 @pytest.mark.asyncio
-async def test_max_attempts_comes_from_the_database_column():
-    """The DB column is authoritative: a job with max_attempts=2 dead-letters after 2 failures."""
-    job = _make_job(max_attempts=2)
-    job_mock = MagicMock(**job)
-    mock_session = _make_session([job_mock])
-    embed_fn = AsyncMock(return_value=[[0.0] * 1536])
+async def test_process_pending_jobs_defaults_missing_claim_amount_to_zero():
+    """A claim row that is already gone still indexes with amount 0.0."""
+    owner_id = await _seed_owner()
+    claim_id = f"CLM-{uuid.uuid4().hex[:8].upper()}"
+    await _seed_job(owner_id, claim_id)
 
+    capture = _UpsertCapture()
     with (
-        patch("app.rag.embedding_jobs.async_session_factory") as mock_factory,
         patch(
-            "app.rag.embedding_jobs.EmbeddingFactory.get_embedding_function", return_value=embed_fn
+            "app.rag.embedding.EmbeddingFactory.get_embedding_function",
+            return_value=_embed_ok(),
         ),
-        patch("app.rag.embedding_jobs.get_vector_store", return_value=AsyncMock()),
+        patch("app.rag.vector_store.get_vector_store", return_value=capture),
     ):
-        mock_factory.return_value.__aenter__.return_value = mock_session
+        await process_pending_jobs(limit=10, worker_id="worker-1")
 
+    assert capture.documents[0]["metadata"]["amount"] == 0.0
+
+
+@pytest.mark.asyncio
+async def test_failed_job_is_marked_failed_with_backoff():
+    """A failing processor leaves the job failed, retry-due, and unlocked."""
+    owner_id = await _seed_owner()
+    claim_id = f"CLM-{uuid.uuid4().hex[:8].upper()}"
+    await _seed_claim(owner_id, claim_id, Decimal("0"))
+    job_id = await _seed_job(owner_id, claim_id)
+
+    embed_fn = AsyncMock(side_effect=Exception("embed error"))
+    with (
+        patch(
+            "app.rag.embedding.EmbeddingFactory.get_embedding_function",
+            return_value=embed_fn,
+        ),
+        patch("app.rag.vector_store.get_vector_store"),
+    ):
+        processed = await process_pending_jobs(limit=10, worker_id="worker-1")
+
+    assert processed == 0
+    job = await _job_row(job_id)
+    assert job.status == "failed"
+    assert job.retry_count == 1
+    assert job.next_retry_at is not None
+    assert job.next_retry_at > datetime.now(UTC)
+    assert job.locked_at is None
+    assert job.locked_by is None
+    assert "embed error" in job.status_detail
+
+
+@pytest.mark.asyncio
+async def test_job_dead_letters_after_exhausting_attempts():
+    """A job whose attempts are exhausted moves to the terminal state."""
+    owner_id = await _seed_owner()
+    claim_id = f"CLM-{uuid.uuid4().hex[:8].upper()}"
+    await _seed_claim(owner_id, claim_id, Decimal("0"))
+    job_id = await _seed_job(owner_id, claim_id, max_attempts=2)
+
+    embed_fn = AsyncMock(side_effect=Exception("embed error"))
+    with (
+        patch(
+            "app.rag.embedding.EmbeddingFactory.get_embedding_function",
+            return_value=embed_fn,
+        ),
+        patch("app.rag.vector_store.get_vector_store"),
+    ):
         for _ in range(2):
-            embed_fn.side_effect = [Exception("embed error")]
-            await process_pending_jobs(limit=10)
+            await process_pending_jobs(limit=10, worker_id="worker-1")
+            # The backoff elapses between passes, making the job retry-due.
+            await _expire_retry_at(job_id)
 
-    assert job_mock.status == "dead_letter"
-    assert job_mock.retry_count == 2
-    assert "Exhausted 2 attempts" in job_mock.status_detail
+    job = await _job_row(job_id)
+    assert job.status == "dead_letter"
+    assert job.retry_count == 2
+    assert job.next_retry_at is None
+    assert "Exhausted 2 attempts" in job.status_detail
 
 
 @pytest.mark.asyncio
-async def test_failed_job_releases_its_lock():
-    """A failed job clears its lock so a later pass can reclaim it."""
-    job = _make_job()
-    job_mock = MagicMock(**job)
-    mock_session = _make_session([job_mock])
-    embed_fn = AsyncMock(return_value=[[0.0] * 1536])
+async def test_dead_letter_job_is_never_selected():
+    """A dead_letter job is not claimable."""
+    owner_id = await _seed_owner()
+    claim_id = f"CLM-{uuid.uuid4().hex[:8].upper()}"
+    job_id = await _seed_job(owner_id, claim_id)
+    async with async_session_factory() as session:
+        job = await session.get(EmbeddingJob, job_id)
+        job.status = "dead_letter"
+        job.status_detail = "gave up"
+        await session.commit()
 
+    capture = _UpsertCapture()
     with (
-        patch("app.rag.embedding_jobs.async_session_factory") as mock_factory,
         patch(
-            "app.rag.embedding_jobs.EmbeddingFactory.get_embedding_function", return_value=embed_fn
+            "app.rag.embedding.EmbeddingFactory.get_embedding_function",
+            return_value=_embed_ok(),
         ),
-        patch("app.rag.embedding_jobs.get_vector_store", return_value=AsyncMock()),
+        patch("app.rag.vector_store.get_vector_store", return_value=capture),
     ):
-        mock_factory.return_value.__aenter__.return_value = mock_session
-        embed_fn.side_effect = [Exception("embed error")]
-        await process_pending_jobs(limit=10, worker_id="worker-1")
+        processed = await process_pending_jobs(limit=10, worker_id="worker-1")
 
-    assert job_mock.status == "failed"
-    assert job_mock.locked_at is None
-    assert job_mock.locked_by is None
-
-
-def _make_reclaim_session(jobs):
-    mock_session = AsyncMock()
-    result = MagicMock()
-    result.scalars.return_value.all.return_value = jobs
-    mock_session.execute.return_value = result
-    mock_session.commit = AsyncMock()
-    return mock_session
-
-
-@pytest.mark.asyncio
-async def test_reclaim_stale_jobs_resets_abandoned_locks():
-    """A job the query returns as stale is reset to pending.
-
-    The mock session cannot evaluate the SQL ``WHERE`` clause, so it
-    returns only the row a real database would select; the filter
-    itself is covered by the Tier B integration test.
-    """
-    from app.rag.embedding_jobs import reclaim_stale_jobs
-
-    stale = _make_job(
-        status="processing",
-        locked_at=datetime.now(UTC) - timedelta(hours=1),
-        locked_by="dead-worker",
-    )
-    stale_mock = MagicMock(**stale)
-    mock_session = _make_reclaim_session([stale_mock])
-
-    with patch("app.rag.embedding_jobs.async_session_factory") as mock_factory:
-        mock_factory.return_value.__aenter__.return_value = mock_session
-        reclaimed = await reclaim_stale_jobs(stale_after_seconds=300)
-
-    assert reclaimed == 1
-    assert stale_mock.status == "pending"
-    assert stale_mock.locked_at is None
-    assert stale_mock.locked_by is None
-    assert stale_mock.status_detail is None
-    mock_session.commit.assert_awaited_once()
-
-
-@pytest.mark.asyncio
-async def test_reclaim_stale_jobs_treats_null_lock_as_stale():
-    """A NULL locked_at predates the column and counts as abandoned."""
-    from app.rag.embedding_jobs import reclaim_stale_jobs
-
-    job = _make_job(status="processing", locked_at=None, locked_by="unknown")
-    job_mock = MagicMock(**job)
-    mock_session = _make_reclaim_session([job_mock])
-
-    with patch("app.rag.embedding_jobs.async_session_factory") as mock_factory:
-        mock_factory.return_value.__aenter__.return_value = mock_session
-        reclaimed = await reclaim_stale_jobs(stale_after_seconds=300)
-
-    assert reclaimed == 1
-    assert job_mock.status == "pending"
-    assert job_mock.locked_by is None
+    assert processed == 0
+    assert capture.documents == []

@@ -1,4 +1,11 @@
-"""Coverage tests for app.rag.eval_runner uncovered paths."""
+"""Coverage tests for ragkit.evaluation.runner uncovered paths.
+
+Moved from ``backend/tests/test_eval_runner_coverage.py``
+(ragkit extraction plan 05). The runner now takes its
+retrieval function and dataset as injected dependencies,
+so the tests inject fakes instead of patching the
+application's retriever and dataset modules.
+"""
 
 from __future__ import annotations
 
@@ -7,32 +14,51 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from ragkit.evaluation.dataset import (
+    Difficulty,
+    EvalSample,
+    QuestionCategory,
+)
+from ragkit.evaluation.runner import (
+    EvalConfig,
+    _run_answer_eval,
+    _run_retrieval_eval,
+    main,
+    run_evaluation,
+)
+
+
+def _sample(query: str = "test") -> EvalSample:
+    return EvalSample(
+        query=query,
+        expected_sections=["Section 1"],
+        gold_answer="gold answer",
+        category=QuestionCategory.COVERAGE,
+        difficulty=Difficulty.EASY,
+    )
+
 
 class TestEvalRunner:
     @pytest.mark.asyncio
     async def test_run_retrieval_eval_exception_in_sample(self):
-        from app.rag.eval_runner import _run_retrieval_eval
+        async def failing_retrieval_fn(query: str) -> list[dict]:
+            raise Exception("search failed")
 
-        with patch(
-            "app.rag.retriever.retrieve_hybrid",
-            side_effect=Exception("search failed"),
-        ):
-            metrics, per_sample = await _run_retrieval_eval(
-                dataset=[MagicMock(query="test", expected_sections=["Section 1"])],
-                n_results=5,
-            )
+        metrics, per_sample = await _run_retrieval_eval(
+            retrieval_fn=failing_retrieval_fn,
+            dataset=[_sample()],
+        )
         assert metrics.errors == 1
         assert per_sample[0].get("error") is not None
 
     @pytest.mark.asyncio
     async def test_run_answer_eval_no_generated_answer(self):
-        from app.rag.answer_evaluator import evaluate_answer_heuristic
-        from app.rag.eval_runner import _run_answer_eval
+        from ragkit.evaluation.answer import evaluate_answer_heuristic
 
-        sample = MagicMock(query="test", gold_answer="gold answer")
+        sample = _sample()
         per_sample = [{"context": "", "chunks_found": 0}]
         with patch(
-            "app.rag.eval_runner.evaluate_answer_heuristic",
+            "ragkit.evaluation.runner.evaluate_answer_heuristic",
             wraps=evaluate_answer_heuristic,
         ):
             metrics, details = await _run_answer_eval(
@@ -44,16 +70,20 @@ class TestEvalRunner:
 
     @pytest.mark.asyncio
     async def test_run_evaluation_no_dataset_returns_early(self):
-        from app.rag.eval_runner import run_evaluation
-
-        with patch("app.rag.eval_runner.get_eval_dataset", return_value=[]):
-            result = await run_evaluation()
+        result = await run_evaluation(
+            EvalConfig(),
+            retrieval_fn=lambda q: [],
+            dataset=[],
+        )
         assert result.summary == "No evaluation samples matched the filters."
 
     @pytest.mark.asyncio
-    async def test_run_evaluation_retrieval_only_mode(self):
-        from app.rag.eval_runner import EvalConfig, run_evaluation
+    async def test_run_evaluation_requires_injected_dependencies(self):
+        with pytest.raises(ValueError):
+            await run_evaluation(EvalConfig())
 
+    @pytest.mark.asyncio
+    async def test_run_evaluation_retrieval_only_mode(self):
         @dataclass
         class FakeMetrics:
             recall_at_k: float = 1.0
@@ -63,27 +93,20 @@ class TestEvalRunner:
             total_queries: int = 1
             errors: int = 0
 
-        with patch("app.rag.eval_runner.get_eval_dataset") as mock_get:
-            mock_get.return_value = [
-                MagicMock(
-                    query="test",
-                    expected_sections=["Section 1"],
-                    gold_answer="gold",
-                    category=MagicMock(value="coverage"),
-                    difficulty=MagicMock(value="easy"),
-                )
-            ]
-            with patch("app.rag.eval_runner._run_retrieval_eval") as mock_retrieval:
-                mock_retrieval.return_value = (FakeMetrics(), [{}])
-                result = await run_evaluation(EvalConfig(mode="retrieval-only"))
+        with patch("ragkit.evaluation.runner._run_retrieval_eval") as mock_retrieval:
+            mock_retrieval.return_value = (FakeMetrics(), [{}])
+            result = await run_evaluation(
+                EvalConfig(mode="retrieval-only"),
+                retrieval_fn=lambda q: [],
+                dataset=[_sample()],
+            )
         assert result.retrieval_metrics["recall_at_k"] == 1.0
 
     @pytest.mark.asyncio
     async def test_run_answer_eval_llm_judge(self):
-        from app.rag.answer_evaluator import AnswerScore
-        from app.rag.eval_runner import _run_answer_eval
+        from ragkit.evaluation.answer import AnswerScore
 
-        sample = MagicMock(query="test", gold_answer="gold answer")
+        sample = _sample()
         per_sample = [{"context": "some context", "chunks_found": 1}]
 
         llm_score = AnswerScore(
@@ -96,7 +119,7 @@ class TestEvalRunner:
         )
 
         with patch(
-            "app.rag.eval_runner.evaluate_answer_llm",
+            "ragkit.evaluation.runner.evaluate_answer_llm",
             new_callable=AsyncMock,
             return_value=llm_score,
         ):
@@ -104,19 +127,18 @@ class TestEvalRunner:
                 dataset=[sample],
                 per_sample_retrieval=per_sample,
                 judge="llm",
+                settings=MagicMock(llm_model="openai/gpt-4o-mini"),
             )
         assert metrics.errors == 0
         assert metrics.avg_faithfulness == 0.9
 
     @pytest.mark.asyncio
     async def test_run_answer_eval_exception_in_sample(self):
-        from app.rag.eval_runner import _run_answer_eval
-
-        sample = MagicMock(query="test", gold_answer="gold")
+        sample = _sample()
         per_sample = [{"context": "", "chunks_found": 0}]
 
         with patch(
-            "app.rag.eval_runner.evaluate_answer_heuristic",
+            "ragkit.evaluation.runner.evaluate_answer_heuristic",
             side_effect=Exception("eval failed"),
         ):
             metrics, details = await _run_answer_eval(
@@ -128,10 +150,11 @@ class TestEvalRunner:
         assert details[0].get("error") is not None
 
     def test_eval_runner_main_cli(self):
-        from app.rag.eval_runner import main
-
         with patch("sys.argv", ["eval_runner", "--mode", "retrieval-only"]):
-            with patch("app.rag.eval_runner.run_evaluation", new_callable=AsyncMock) as mock_run:
+            with patch(
+                "ragkit.evaluation.runner.run_evaluation",
+                new_callable=AsyncMock,
+            ) as mock_run:
 
                 @dataclass
                 class FakeResult:
@@ -146,8 +169,6 @@ class TestEvalRunner:
                 main()
 
     def test_eval_runner_main_cli_with_output(self, tmp_path):
-        from app.rag.eval_runner import main
-
         output_file = tmp_path / "result.json"
         with patch(
             "sys.argv",
@@ -159,7 +180,10 @@ class TestEvalRunner:
                 str(output_file),
             ],
         ):
-            with patch("app.rag.eval_runner.run_evaluation", new_callable=AsyncMock) as mock_run:
+            with patch(
+                "ragkit.evaluation.runner.run_evaluation",
+                new_callable=AsyncMock,
+            ) as mock_run:
 
                 @dataclass
                 class FakeResult:
@@ -175,8 +199,6 @@ class TestEvalRunner:
         assert output_file.exists()
 
     def test_eval_runner_main_output_writes_context_pop(self, tmp_path):
-        from app.rag.eval_runner import main
-
         output_file = tmp_path / "eval_result.json"
         with patch(
             "sys.argv",
@@ -188,7 +210,10 @@ class TestEvalRunner:
                 str(output_file),
             ],
         ):
-            with patch("app.rag.eval_runner.run_evaluation", new_callable=AsyncMock) as mock_run:
+            with patch(
+                "ragkit.evaluation.runner.run_evaluation",
+                new_callable=AsyncMock,
+            ) as mock_run:
 
                 @dataclass
                 class FakeResult:
