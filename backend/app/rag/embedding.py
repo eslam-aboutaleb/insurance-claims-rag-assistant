@@ -1,84 +1,23 @@
-"""
-Embedding function factory for the OmniCare RAG subsystem.
+"""Re-export shim for the ragkit embedding seam.
 
-This module provides a single factory method for creating embedding functions.
-Currently it defaults to LiteLLM's embedding interface, but the factory
-pattern makes it trivial to swap providers (e.g. OpenAI, Vertex AI,
-HuggingFace) without touching the retriever or ingestion code.
+The implementation moved to :mod:`ragkit.embeddings` (ragkit
+plan 02). This module keeps the historical import path working
+until plan 07 removes the shims.
 
-Why a factory instead of direct instantiation?
-  - Centralizes the embedding configuration (API key, model name) in one place.
-  - Allows runtime selection of the embedding provider via settings.
-  - Keeps the client creation code clean and testable.
+The factory delegates to
+:func:`ragkit.embeddings.registry.get_embedding_function`
+with the application settings, so provider selection now flows
+through the ragkit provider registry. ``get_settings`` remains
+importable from this module so tests can patch it here.
 """
 
 from __future__ import annotations
 
-import asyncio
-import logging
-
-import litellm
-
 from app.config import get_settings
+from ragkit.embeddings.litellm import LitellmEmbeddingFunction
+from ragkit.embeddings.registry import get_embedding_function as _get_embedding_function
 
-logger = logging.getLogger(__name__)
-
-
-class LitellmEmbeddingFunction:
-    """Callable embedding function backed by LiteLLM.
-
-    Wraps ``litellm.embedding`` so the rest of the RAG pipeline can treat it
-    as a drop-in replacement for the previous ChromaDB embedding function.
-    """
-
-    def __init__(self, api_key: str, model_name: str):
-        self.api_key = api_key
-        self.model_name = model_name
-
-    def _embed_sync(self, input: list[str]) -> list[list[float]]:
-        """Synchronous embedding call (runs in threadpool)."""
-        response = litellm.embedding(
-            model=self.model_name,
-            input=input,
-            api_key=self.api_key,
-        )
-        return [item["embedding"] for item in response.data]
-
-    async def __call__(self, input: list[str]) -> list[list[float]]:
-        """Embed a list of text strings asynchronously.
-
-        Args:
-            input: List of text strings to embed.
-
-        Returns:
-            List of embedding vectors (each a list of floats).
-        """
-        return await asyncio.to_thread(self._embed_sync, input)
-
-    async def embed_query(self, input: str | list[str]) -> list[float]:
-        """Embed a single query string asynchronously.
-
-        Args:
-            input: Query string or list containing one string.
-
-        Returns:
-            A single embedding vector as a list of floats.
-        """
-        if isinstance(input, str):
-            input = [input]
-        result = await self(input)
-        return result[0]
-
-    async def embed_documents(self, input: list[str]) -> list[list[float]]:
-        """Embed a list of document strings asynchronously.
-
-        Args:
-            input: List of document text strings.
-
-        Returns:
-            List of embedding vectors.
-        """
-        return await self(input)
+__all__ = ["EmbeddingFactory", "LitellmEmbeddingFunction"]
 
 
 class EmbeddingFactory:
@@ -95,15 +34,13 @@ class EmbeddingFactory:
     def get_embedding_function(cls):
         """Create and return an embedding function.
 
-        Currently returns a ``LitellmEmbeddingFunction`` configured with
-        the API key and model name from the application settings.
+        Delegates to the ragkit embedding registry, which selects the
+        provider from ``settings.embedding_provider`` (defaulting to
+        the LiteLLM provider) and configures it with the API key and
+        model name from the application settings.
 
         Returns:
             An embedding function instance ready for use with the
             retriever and ingestion pipelines.
         """
-        settings = get_settings()
-        return LitellmEmbeddingFunction(
-            api_key=settings.openai_api_key,
-            model_name=settings.embedding_model,
-        )
+        return _get_embedding_function(get_settings())

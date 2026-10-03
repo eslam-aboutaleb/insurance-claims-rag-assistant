@@ -1,15 +1,19 @@
-"""Tests for app.rag.embedding_dimensions.
+"""Tests for the app.rag.embedding_dimensions re-export shim.
 
-Covers the provider dimension table and the warning-and-fallback path for
-models that are not registered, which is the corner case a deployment hits
-when it swaps in an embedding provider the table does not know about yet.
+The implementation lives in :mod:`ragkit.embeddings.dimensions`
+(ragkit plan 02). Covers the provider dimension table, the
+warning-and-fallback path for models that are not registered
+(the corner case a deployment hits when it swaps in an
+embedding provider the table does not know about), and
+resolution of the configured model when no explicit model is
+passed.
 """
 
 from __future__ import annotations
 
 import logging
 
-from app.rag.embedding_dimensions import get_embedding_dimension
+from app.rag.embedding_dimensions import get_embedding_dimension, register_dimension
 
 
 class TestEmbeddingDimensions:
@@ -22,7 +26,7 @@ class TestEmbeddingDimensions:
         assert get_embedding_dimension("text-embedding-3-large") == 3072
 
     def test_unknown_model_warns_and_falls_back(self, caplog):
-        with caplog.at_level(logging.WARNING, logger="app.rag.embedding_dimensions"):
+        with caplog.at_level(logging.WARNING, logger="ragkit.embeddings.dimensions"):
             dimension = get_embedding_dimension("brand-new-model")
 
         assert dimension == 1536
@@ -35,3 +39,15 @@ class TestEmbeddingDimensions:
         from app.config import settings
 
         assert get_embedding_dimension() == get_embedding_dimension(settings.embedding_model)
+
+    def test_register_dimension_extends_the_table(self):
+        register_dimension("ragkit-shim-test-model", 768)
+
+        assert get_embedding_dimension("ragkit-shim-test-model") == 768
+
+    def test_register_dimension_is_reexported(self):
+        from ragkit.embeddings.dimensions import (
+            register_dimension as ragkit_register_dimension,
+        )
+
+        assert register_dimension is ragkit_register_dimension

@@ -1,41 +1,19 @@
-"""Coverage tests for app.rag.ingest uncovered paths."""
+"""Coverage tests for app.rag.ingest uncovered paths.
+
+The chunking tests moved to ``libs/ragkit/tests/test_chunking.py``
+together with the chunking implementation (ragkit plan 02); the
+ingestion-path tests below remain here because
+``app.rag.ingest`` is refactored in plan 04.
+"""
 
 from __future__ import annotations
 
-import os
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 
 class TestIngest:
-    def test_sliding_window_chunk_empty_text(self):
-        from app.rag.ingest import sliding_window_chunk
-
-        assert sliding_window_chunk("") == []
-        assert sliding_window_chunk("   ") == []
-
-    def test_chunk_policy_document_file_not_found(self):
-        from app.rag.ingest import chunk_policy_document
-
-        result = chunk_policy_document("/nonexistent/path/policy.md")
-        assert result == []
-
-    def test_chunk_policy_document_no_title_match(self):
-        from app.rag.ingest import chunk_policy_document
-
-        text = "Some content without title"
-        import tempfile
-
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False) as f:
-            f.write(text)
-            path = f.name
-        try:
-            result = chunk_policy_document(path)
-            assert len(result) > 0
-        finally:
-            os.unlink(path)
-
     @pytest.mark.asyncio
     async def test_ingest_policy_no_path_configured(self):
         from app.config import Settings
