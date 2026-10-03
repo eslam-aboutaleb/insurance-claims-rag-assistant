@@ -60,6 +60,13 @@ class Settings(BaseSettings):
         default="text-embedding-3-small",
         description="OpenAI embedding model name used by the embedding function",
     )
+    embedding_provider: str = Field(
+        default="litellm",
+        description=(
+            "Embedding provider selected through the ragkit embedding "
+            "registry; 'litellm' is the historical behavior."
+        ),
+    )
     embedding_drain_interval_seconds: float = Field(
         default=5.0,
         gt=0.1,
