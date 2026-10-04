@@ -12,8 +12,8 @@ from typing import Any
 
 import pytest
 
-from app.rag.pgvector_store import _validate_embedding
-from app.rag.vector_store import get_vector_store
+from ragkit.validation import validate_embedding as _validate_embedding
+from app.domain.embeddings import get_vector_store
 
 
 @pytest.mark.asyncio

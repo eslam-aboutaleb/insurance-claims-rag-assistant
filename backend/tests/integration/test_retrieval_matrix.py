@@ -16,8 +16,8 @@ from typing import Any
 
 import pytest
 
-from app.rag.retriever import retrieve_hybrid
-from app.rag.vector_store import get_vector_store
+from app.domain.policies.retriever import retrieve_hybrid
+from app.domain.embeddings import get_vector_store
 from tests.integration.conftest import (
     BACKEND_DIR,
     hash_embedding,

@@ -20,8 +20,7 @@ from sqlalchemy import select
 from app.database import async_session_factory
 from app.domain.claims.retriever import CLAIMS_RETRIEVER_SPEC
 from app.models.claim import Claim
-from app.rag.embedding import EmbeddingFactory
-from app.rag.vector_store import get_vector_store
+from app.domain.embeddings import EmbeddingFactory, get_vector_store
 from ragkit.embeddings import get_embedding_dimension
 from ragkit.validation import validate_embedding
 

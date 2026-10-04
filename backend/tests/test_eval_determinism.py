@@ -16,7 +16,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from app.rag.eval_dataset import (
+from app.domain.evaluation import (
     Difficulty,
     QuestionCategory,
     get_eval_dataset,

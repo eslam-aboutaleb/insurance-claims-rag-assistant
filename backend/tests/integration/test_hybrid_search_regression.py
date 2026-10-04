@@ -16,7 +16,7 @@ from typing import Any
 
 import pytest
 
-from app.rag.vector_store import get_vector_store
+from app.domain.embeddings import get_vector_store
 from tests.integration.conftest import EMBEDDING_DIM, hash_embedding
 
 DISTANCE_THRESHOLD = 1.3

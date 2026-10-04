@@ -14,7 +14,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from app.rag.embedding_jobs import reclaim_stale_jobs
+from app.domain.claims.outbox import reclaim_stale_jobs
 
 
 async def _insert_job(

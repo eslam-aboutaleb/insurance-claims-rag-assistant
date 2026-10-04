@@ -11,8 +11,13 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 from app.auth import get_current_user
-from app.rag.eval_dataset import Difficulty, QuestionCategory, get_eval_dataset
-from app.rag.eval_runner import EvalConfig, run_evaluation
+from app.domain.evaluation import (
+    Difficulty,
+    EvalConfig,
+    QuestionCategory,
+    get_eval_dataset,
+    run_evaluation,
+)
 from app.rate_limiter import limiter
 from app.schemas.models import ErrorResponse, RagEvalRequest, RagEvalResponse
 

@@ -207,20 +207,24 @@ def install_scripted_llm() -> Iterator[Callable[[ScriptedTurn], ScriptedLlm]]:
     Installation is explicit rather than autouse so a scenario that must observe a real
     failure can leave the real model in place. The real model is restored on teardown.
 
+    The agent is built lazily on first use (plan 07), so ``get_runner()`` is
+    called first to force construction before the model is captured.
+
     Yields:
         Callable[[ScriptedTurn], ScriptedLlm]: Installer returning the installed double.
     """
-    from app.agent.agent import omnicare_agent  # noqa: PLC0415
+    from app.agent import agent as agent_module  # noqa: PLC0415
 
-    original = omnicare_agent.model
+    agent_module.get_runner()  # plan 07: the agent is built lazily on first use
+    original = agent_module.omnicare_agent.model
     installed: list[ScriptedLlm] = []
 
     def _install(turn: ScriptedTurn) -> ScriptedLlm:
         double = ScriptedLlm(turn=turn)
-        omnicare_agent.model = double
+        agent_module.omnicare_agent.model = double
         installed.append(double)
         return double
 
     yield _install
 
-    omnicare_agent.model = original
+    agent_module.omnicare_agent.model = original

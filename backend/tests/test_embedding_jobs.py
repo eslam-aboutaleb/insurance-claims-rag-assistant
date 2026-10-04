@@ -23,7 +23,7 @@ from app.database import async_session_factory
 from app.models.claim import Claim
 from app.models.embedding_job import EmbeddingJob
 from app.models.user import User
-from app.rag.embedding_jobs import process_pending_jobs
+from app.domain.claims.outbox import process_pending_jobs
 
 
 class _UpsertCapture:
@@ -123,10 +123,10 @@ async def test_process_pending_jobs_completes_and_upserts_claim_index_entry():
     capture = _UpsertCapture()
     with (
         patch(
-            "app.rag.embedding.EmbeddingFactory.get_embedding_function",
+            "app.domain.embeddings.EmbeddingFactory.get_embedding_function",
             return_value=_embed_ok(),
         ),
-        patch("app.rag.vector_store.get_vector_store", return_value=capture),
+        patch("app.domain.embeddings.get_vector_store", return_value=capture),
     ):
         processed = await process_pending_jobs(limit=10, worker_id="worker-1")
 
@@ -159,10 +159,10 @@ async def test_process_pending_jobs_uses_claim_status_in_metadata():
     capture = _UpsertCapture()
     with (
         patch(
-            "app.rag.embedding.EmbeddingFactory.get_embedding_function",
+            "app.domain.embeddings.EmbeddingFactory.get_embedding_function",
             return_value=_embed_ok(),
         ),
-        patch("app.rag.vector_store.get_vector_store", return_value=capture),
+        patch("app.domain.embeddings.get_vector_store", return_value=capture),
     ):
         await process_pending_jobs(limit=10, worker_id="worker-1")
 
@@ -181,10 +181,10 @@ async def test_process_pending_jobs_defaults_missing_claim_amount_to_zero():
     capture = _UpsertCapture()
     with (
         patch(
-            "app.rag.embedding.EmbeddingFactory.get_embedding_function",
+            "app.domain.embeddings.EmbeddingFactory.get_embedding_function",
             return_value=_embed_ok(),
         ),
-        patch("app.rag.vector_store.get_vector_store", return_value=capture),
+        patch("app.domain.embeddings.get_vector_store", return_value=capture),
     ):
         await process_pending_jobs(limit=10, worker_id="worker-1")
 
@@ -202,10 +202,10 @@ async def test_failed_job_is_marked_failed_with_backoff():
     embed_fn = AsyncMock(side_effect=Exception("embed error"))
     with (
         patch(
-            "app.rag.embedding.EmbeddingFactory.get_embedding_function",
+            "app.domain.embeddings.EmbeddingFactory.get_embedding_function",
             return_value=embed_fn,
         ),
-        patch("app.rag.vector_store.get_vector_store"),
+        patch("app.domain.embeddings.get_vector_store"),
     ):
         processed = await process_pending_jobs(limit=10, worker_id="worker-1")
 
@@ -231,10 +231,10 @@ async def test_job_dead_letters_after_exhausting_attempts():
     embed_fn = AsyncMock(side_effect=Exception("embed error"))
     with (
         patch(
-            "app.rag.embedding.EmbeddingFactory.get_embedding_function",
+            "app.domain.embeddings.EmbeddingFactory.get_embedding_function",
             return_value=embed_fn,
         ),
-        patch("app.rag.vector_store.get_vector_store"),
+        patch("app.domain.embeddings.get_vector_store"),
     ):
         for _ in range(2):
             await process_pending_jobs(limit=10, worker_id="worker-1")
@@ -263,10 +263,10 @@ async def test_dead_letter_job_is_never_selected():
     capture = _UpsertCapture()
     with (
         patch(
-            "app.rag.embedding.EmbeddingFactory.get_embedding_function",
+            "app.domain.embeddings.EmbeddingFactory.get_embedding_function",
             return_value=_embed_ok(),
         ),
-        patch("app.rag.vector_store.get_vector_store", return_value=capture),
+        patch("app.domain.embeddings.get_vector_store", return_value=capture),
     ):
         processed = await process_pending_jobs(limit=10, worker_id="worker-1")
 

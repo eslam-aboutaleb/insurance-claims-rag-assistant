@@ -27,11 +27,8 @@ from google.genai import types
 
 from app.agent.context import current_user_id
 from app.agent.prompts import SYSTEM_INSTRUCTION
-from app.agent.tools.claim_status import get_claim_status
-from app.agent.tools.submit_claim import prepare_claim_submission
-from app.config import settings
-from app.domain.claims.tools import search_claims
-from app.domain.policies.tools import query_policy
+from app.agent.registry import ToolRegistry, build_default_registry
+from app.config import Settings, settings
 
 logger = logging.getLogger(__name__)
 
@@ -56,33 +53,76 @@ def configure_llm() -> None:
 
 # --- Agent & Runtime -----------------------------------------------------
 
-# Create the ADK agent with LiteLLM model routing.
-# Note: LiteLLM reads OPENAI_API_KEY / OPENAI_API_BASE from environment,
-# so configure_llm() must be called before the first agent invocation.
-omnicare_agent = LlmAgent(
-    name="omnicare_assistant",
-    model=LiteLlm(model=settings.llm_model),
-    instruction=SYSTEM_INSTRUCTION,
-    description=(
-        "OmniCare Financial customer service assistant that handles "
-        "policy questions, claim lookups, and claim submissions."
-    ),
-    tools=[query_policy, get_claim_status, search_claims, prepare_claim_submission],
-)
+# The ADK agent, session service, and runner are built lazily by
+# get_runner() on first use rather than at import time, so importing
+# this module has no side effects. The module-level attributes stay
+# patchable: tests replace app.agent.agent.runner /
+# app.agent.agent.session_service exactly as they did with the
+# import-time construction.
+omnicare_agent: LlmAgent | None = None
+session_service: InMemorySessionService | None = None
+runner: Runner | None = None
 
-# InMemorySessionService for conversation state (sufficient for prototype).
-session_service = InMemorySessionService()
 
-# Runner manages the agent execution lifecycle.
-runner = Runner(
-    agent=omnicare_agent,
-    app_name="omnicare_financial",
-    session_service=session_service,
-)
+def create_agent(tool_registry: ToolRegistry, settings: Settings) -> LlmAgent:
+    """Create the ADK agent from a tool registry.
+
+    Args:
+        tool_registry: Registry supplying the agent's tools.
+        settings: Application settings; ``llm_model`` selects the
+            LiteLLM model.
+
+    Returns:
+        A configured :class:`LlmAgent` with the registry's tools.
+    """
+    return LlmAgent(
+        name="omnicare_assistant",
+        model=LiteLlm(model=settings.llm_model),
+        instruction=SYSTEM_INSTRUCTION,
+        description=(
+            "OmniCare Financial customer service assistant that handles "
+            "policy questions, claim lookups, and claim submissions."
+        ),
+        tools=tool_registry.build_tool_list(),
+    )
+
+
+def get_runner() -> Runner:
+    """Lazily build and cache the ADK runner.
+
+    The agent, session service, and runner are created on the first
+    call and cached in the module-level ``omnicare_agent``,
+    ``session_service``, and ``runner`` attributes. A patched
+    ``session_service`` or ``runner`` (see the agent tests) is
+    preserved: only ``None`` attributes are built.
+
+    Returns:
+        The cached :class:`Runner` for the OmniCare agent.
+    """
+    global omnicare_agent, session_service, runner
+    if session_service is None:
+        session_service = InMemorySessionService()
+    if runner is None:
+        omnicare_agent = create_agent(build_default_registry(), settings)
+        runner = Runner(
+            agent=omnicare_agent,
+            app_name="omnicare_financial",
+            session_service=session_service,
+        )
+    return runner
+
+
+def _session_service() -> InMemorySessionService:
+    """Return the session service, building it on first use."""
+    global session_service
+    if session_service is None:
+        session_service = InMemorySessionService()
+    return session_service
+
 
 # Track active sessions per user, bounded to MAX_SESSIONS to prevent
-# unbounded memory growth in long-running processes. When the limit is
-# reached, the oldest session is evicted (FIFO).
+# unbounded memory growth in long-running processes. When the limit
+# is reached, the oldest session is evicted (FIFO).
 _MAX_SESSIONS = 500
 _user_sessions: dict[str, str] = {}
 
@@ -138,7 +178,7 @@ async def _ensure_session(user_id: str) -> str:
             # Clean up the session object from the InMemorySessionService to
             # prevent unbounded memory growth over long-running server uptime.
             try:
-                await session_service.delete_session(
+                await _session_service().delete_session(
                     app_name="omnicare_financial",
                     session_id=evicted_session_id,
                 )
@@ -154,7 +194,7 @@ async def _ensure_session(user_id: str) -> str:
                 )
 
         session_id = f"session_{uuid.uuid4().hex[:12]}"
-        await session_service.create_session(
+        await _session_service().create_session(
             app_name="omnicare_financial",
             user_id=user_id,
             session_id=session_id,
@@ -170,7 +210,7 @@ async def reset_user_session(user_id: str) -> None:
     session_id = _user_sessions.pop(user_id, None)
     if session_id:
         try:
-            await session_service.delete_session(
+            await _session_service().delete_session(
                 app_name="omnicare_financial",
                 session_id=session_id,
             )
@@ -223,6 +263,9 @@ async def run_agent(user_id: str, message: str) -> dict[str, Any]:
     final_text_parts: list[str] = []
     sources: list[str] = []
     tool_calls: list[dict] = []
+
+    # Resolve the lazily built (and patchable) runner.
+    runner = get_runner()
 
     # Run the agent and iterate through events. The ADK runner yields a stream
     # of events representing the agent's reasoning, tool invocations, and
@@ -333,6 +376,9 @@ async def run_agent_stream(
     final_text_parts: list[str] = []
     sources: list[str] = []
     tool_calls: list[dict] = []
+
+    # Resolve the lazily built (and patchable) runner.
+    runner = get_runner()
 
     async for event in runner.run_async(
         user_id=user_id,

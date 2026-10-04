@@ -262,8 +262,7 @@ async def ingest_policy(policy_path: str | None = None) -> int:
         logger.warning("No policy_path configured; skipping ingestion.")
         return 0
 
-    from app.rag.embedding import EmbeddingFactory  # noqa: PLC0415
-    from app.rag.vector_store import get_vector_store  # noqa: PLC0415
+    from app.domain.embeddings import EmbeddingFactory, get_vector_store  # noqa: PLC0415
 
     source = FileDocumentSource(policy_path)
     source_name = policy_path.rsplit("/", maxsplit=1)[-1]

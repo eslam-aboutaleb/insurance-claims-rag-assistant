@@ -1,4 +1,4 @@
-"""Tests for the app.rag.embedding_dimensions re-export shim.
+"""Tests for the ragkit.embeddings re-export shim.
 
 The implementation lives in :mod:`ragkit.embeddings.dimensions`
 (ragkit plan 02). Covers the provider dimension table, the
@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import logging
 
-from app.rag.embedding_dimensions import get_embedding_dimension, register_dimension
+from ragkit.embeddings import get_embedding_dimension, register_dimension
 
 
 class TestEmbeddingDimensions:

@@ -9,15 +9,16 @@ import pytest
 
 from app.config import get_settings
 from app.database import async_session_factory
-from app.rag.claims_rag import ingest_all_claims, ingest_claim, retrieve_claims_hybrid
-from app.rag.embedding import EmbeddingFactory, LitellmEmbeddingFunction
-from app.rag.ingest import (
+from app.domain.claims.ingest import ingest_all_claims, ingest_claim
+from app.domain.claims.retriever import retrieve_claims_hybrid
+from app.domain.embeddings import EmbeddingFactory, LitellmEmbeddingFunction
+from app.domain.policies.ingestion import (
     POLICY_CHUNKER_SNAPSHOT_VERSION,
     PolicyVersionStore,
     chunk_policy_document,
     ingest_policy,
 )
-from app.rag.retriever import retrieve_hybrid
+from app.domain.policies.retriever import retrieve_hybrid
 from ragkit.types import SearchResult
 
 
@@ -38,7 +39,7 @@ async def test_retrieve_hybrid_exception():
     mock_retriever = AsyncMock()
     mock_retriever.retrieve.side_effect = Exception("DB error")
 
-    with patch("app.rag.retriever.HybridRetriever", return_value=mock_retriever):
+    with patch("app.domain.policies.retriever.HybridRetriever", return_value=mock_retriever):
         res = await retrieve_hybrid("test")
         assert res == []
 
@@ -61,7 +62,9 @@ async def test_retrieve_hybrid_success():
     mock_retriever.retrieve.return_value = [mock_result]
 
     with (
-        patch("app.rag.retriever.HybridRetriever", return_value=mock_retriever) as mock_cls,
+        patch(
+            "app.domain.policies.retriever.HybridRetriever", return_value=mock_retriever
+        ) as mock_cls,
     ):
         res = await retrieve_hybrid("test", n_results=3, distance_threshold=0.9)
 
@@ -77,7 +80,7 @@ async def test_retrieve_hybrid_success():
 
     # Without an explicit threshold the settings default is forwarded.
     settings = get_settings()
-    with patch("app.rag.retriever.HybridRetriever", return_value=mock_retriever):
+    with patch("app.domain.policies.retriever.HybridRetriever", return_value=mock_retriever):
         await retrieve_hybrid("test")
     mock_retriever.retrieve.assert_awaited_with(
         "test", n_results=5, distance_threshold=settings.rag_distance_threshold
@@ -121,13 +124,17 @@ async def test_ingest_policy_success(tmp_path):
     mock_pipeline.run.return_value = 7
 
     with (
-        patch("app.rag.ingest.get_vector_store", return_value=mock_store) as mock_get_store,
+        patch("app.domain.embeddings.get_vector_store", return_value=mock_store) as mock_get_store,
         patch(
-            "app.rag.ingest.EmbeddingFactory.get_embedding_function",
+            "app.domain.embeddings.EmbeddingFactory.get_embedding_function",
             return_value=mock_embedder,
         ),
-        patch("app.rag.ingest.FileDocumentSource", return_value=mock_source) as mock_source_cls,
-        patch("app.rag.ingest.IngestionPipeline", return_value=mock_pipeline) as mock_pipeline_cls,
+        patch(
+            "app.domain.policies.ingestion.FileDocumentSource", return_value=mock_source
+        ) as mock_source_cls,
+        patch(
+            "app.domain.policies.ingestion.IngestionPipeline", return_value=mock_pipeline
+        ) as mock_pipeline_cls,
     ):
         count = await ingest_policy(policy_path=str(md_file))
 
@@ -161,8 +168,10 @@ async def test_ingest_policy_defaults_to_configured_path():
     mock_pipeline.run.return_value = 0
 
     with (
-        patch("app.rag.ingest.FileDocumentSource", return_value=mock_source) as mock_source_cls,
-        patch("app.rag.ingest.IngestionPipeline", return_value=mock_pipeline),
+        patch(
+            "app.domain.policies.ingestion.FileDocumentSource", return_value=mock_source
+        ) as mock_source_cls,
+        patch("app.domain.policies.ingestion.IngestionPipeline", return_value=mock_pipeline),
     ):
         count = await ingest_policy()
 
@@ -177,9 +186,9 @@ async def test_ingest_policy_returns_zero_without_configured_path():
     stub_settings.policy_file_path = ""
 
     with (
-        patch("app.rag.ingest.get_settings", return_value=stub_settings),
-        patch("app.rag.ingest.FileDocumentSource") as mock_source_cls,
-        patch("app.rag.ingest.IngestionPipeline") as mock_pipeline_cls,
+        patch("app.domain.policies.ingestion.get_settings", return_value=stub_settings),
+        patch("app.domain.policies.ingestion.FileDocumentSource") as mock_source_cls,
+        patch("app.domain.policies.ingestion.IngestionPipeline") as mock_pipeline_cls,
     ):
         count = await ingest_policy()
 
@@ -193,7 +202,7 @@ async def test_ingest_policy_skips_missing_file():
     """ingest_policy() returns 0 and does not crash when file is missing."""
     mock_store = AsyncMock()
 
-    with patch("app.rag.ingest.get_vector_store", return_value=mock_store):
+    with patch("app.domain.embeddings.get_vector_store", return_value=mock_store):
         count = await ingest_policy(policy_path="/nonexistent/path/policy.md")
         assert count == 0
         mock_store.upsert.assert_not_called()
@@ -223,8 +232,8 @@ async def test_claims_rag_hybrid():
     ]
 
     with (
-        patch("app.rag.claims_rag.get_vector_store", return_value=mock_store),
-        patch("app.rag.claims_rag.EmbeddingFactory.get_embedding_function") as mock_embed,
+        patch("ragkit.retrieval.retriever.get_vector_store", return_value=mock_store),
+        patch("ragkit.retrieval.retriever.get_embedding_function") as mock_embed,
     ):
         mock_embed.return_value = AsyncMock(return_value=[[0.1] * 1536])
         results = await retrieve_claims_hybrid("kitchen pipe", test_user_id)
@@ -237,12 +246,12 @@ async def test_claims_rag_hybrid():
 async def test_claims_rag_exception_handling():
     test_user_id = uuid.uuid4()
 
-    with patch("app.rag.claims_rag.get_vector_store") as mock_factory:
+    with patch("ragkit.retrieval.retriever.get_vector_store") as mock_factory:
         mock_store = AsyncMock()
         mock_factory.return_value = mock_store
         mock_store.hybrid_search.side_effect = Exception("DB error")
 
-        with patch("app.rag.claims_rag.EmbeddingFactory.get_embedding_function") as mock_embed:
+        with patch("ragkit.retrieval.retriever.get_embedding_function") as mock_embed:
             mock_embed.return_value = AsyncMock(return_value=[[0.1] * 1536])
             error_results = await retrieve_claims_hybrid("kitchen", test_user_id)
             assert error_results == []
@@ -255,8 +264,8 @@ async def test_ingest_claim():
     mock_store = AsyncMock()
 
     with (
-        patch("app.rag.claims_rag.get_vector_store", return_value=mock_store),
-        patch("app.rag.claims_rag.EmbeddingFactory.get_embedding_function") as mock_embed,
+        patch("app.domain.claims.ingest.get_vector_store", return_value=mock_store),
+        patch("app.domain.claims.ingest.EmbeddingFactory.get_embedding_function") as mock_embed,
     ):
         mock_embed.return_value = AsyncMock(return_value=[[0.1] * 1536])
         await ingest_claim(
@@ -287,14 +296,14 @@ async def test_ingest_all_claims():
     mock_claim.status = "Open"
     mock_claim.amount = 1000.0
 
-    with patch("app.rag.claims_rag.async_session_factory") as mock_factory:
+    with patch("app.domain.claims.ingest.async_session_factory") as mock_factory:
         mock_session = AsyncMock()
         mock_result = MagicMock()
         mock_result.scalars.return_value.all.return_value = [mock_claim]
         mock_session.execute.return_value = mock_result
         mock_factory.return_value.__aenter__.return_value = mock_session
 
-        with patch("app.rag.claims_rag.ingest_claim", new_callable=AsyncMock) as mock_ingest:
+        with patch("app.domain.claims.ingest.ingest_claim", new_callable=AsyncMock) as mock_ingest:
             await ingest_all_claims()
             mock_ingest.assert_called_once()
             call_kwargs = mock_ingest.call_args[1]

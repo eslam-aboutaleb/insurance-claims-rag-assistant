@@ -17,7 +17,7 @@ import pytest_asyncio
 from sqlalchemy import text
 
 from app.database import async_session_factory
-from app.rag.ingest import PolicyVersionStore
+from app.domain.policies.ingestion import PolicyVersionStore
 from ragkit.ingestion import IngestionSnapshot
 
 _POLICY_TABLES = ("policy_chunks", "policy_versions", "policy_ingestion_meta", "policies")

@@ -3,7 +3,7 @@ Tests for the embedding-job outbox invariant.
 
 ``embedding_jobs.claim_uuid`` has no foreign key to ``claims``, so an enqueue that
 commits on its own session can outlive the claim transaction it was meant to track.
-These tests pin the invariant documented in ``app.rag.embedding_jobs``: a job is
+These tests pin the invariant documented in ``app.domain.claims.outbox``: a job is
 committed in the same transaction as the claim, or by a caller whose claim is already
 durable.
 """
@@ -14,7 +14,7 @@ import uuid
 from sqlalchemy import func, select
 
 from app.database import async_session_factory
-from app.rag.embedding_jobs import enqueue_embedding_job
+from app.domain.claims.outbox import enqueue_embedding_job
 
 
 def _register_user() -> uuid.UUID:

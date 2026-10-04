@@ -639,13 +639,13 @@ class TestClaimIsolation:
         """Claims search tool scopes results to current user."""
         import inspect
 
-        from app.agent.tools.search_claims import search_claims
+        from app.domain.claims.tools import search_claims
 
         source = inspect.getsource(search_claims)
         # Verify the tool uses current_user_id from context
         assert "current_user_id" in source, "search_claims should use current_user_id for scoping"
         # Verify the RAG function filters by owner_id
-        from app.rag.claims_rag import retrieve_claims_hybrid
+        from app.domain.claims.retriever import retrieve_claims_hybrid
 
         rag_source = inspect.getsource(retrieve_claims_hybrid)
         assert "owner_id" in rag_source, "retrieve_claims_hybrid should filter by owner_id"

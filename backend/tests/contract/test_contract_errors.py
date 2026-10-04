@@ -311,7 +311,7 @@ def test_idor_claim_search_tool_is_owner_scoped(
     """
     import asyncio
 
-    from app.agent.tools.search_claims import search_claims
+    from app.domain.claims.tools import search_claims
 
     results = asyncio.run(search_claims(query="kitchen flooding", n_results=5))
     owners = {row.get("metadata", {}).get("owner_id") for row in results}

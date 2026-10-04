@@ -13,13 +13,13 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from app.rag.embedding_jobs import enqueue_embedding_job
+from app.domain.claims.outbox import enqueue_embedding_job
 
 
 class TestEmbeddingJobs:
     @pytest.mark.asyncio
     async def test_enqueue_embedding_job_exception_logged(self):
-        from app.rag import embedding_jobs
+        from app.domain.claims import outbox as embedding_jobs
 
         with patch.object(embedding_jobs, "async_session_factory") as mock_factory:
             mock_factory.return_value.__aenter__.side_effect = Exception("DB down")
@@ -37,7 +37,7 @@ class TestEmbeddingJobs:
 
     @pytest.mark.asyncio
     async def test_enqueue_embedding_job_success(self):
-        from app.rag import embedding_jobs
+        from app.domain.claims import outbox as embedding_jobs
 
         with patch.object(embedding_jobs, "async_session_factory") as mock_factory:
             mock_session = AsyncMock()

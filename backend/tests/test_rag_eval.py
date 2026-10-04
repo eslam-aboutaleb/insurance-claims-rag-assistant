@@ -71,7 +71,7 @@ def test_api_evaluate_rag_endpoint(test_client, mock_current_user):
         }
     ]
 
-    with patch("app.rag.retriever.retrieve_hybrid", new_callable=AsyncMock) as mock_retrieve:
+    with patch("app.domain.evaluation.retrieve_hybrid", new_callable=AsyncMock) as mock_retrieve:
         mock_retrieve.return_value = mock_hybrid_results
 
         payload = {
@@ -107,7 +107,7 @@ def test_api_evaluate_rag_endpoint_retrieval_only(test_client, mock_current_user
         }
     ]
 
-    with patch("app.rag.retriever.retrieve_hybrid", new_callable=AsyncMock) as mock_retrieve:
+    with patch("app.domain.evaluation.retrieve_hybrid", new_callable=AsyncMock) as mock_retrieve:
         mock_retrieve.return_value = mock_hybrid_results
 
         payload = {
@@ -159,7 +159,7 @@ def test_api_evaluate_rag_endpoint_config_round_trip(test_client, mock_current_u
         }
     ]
 
-    with patch("app.rag.retriever.retrieve_hybrid", new_callable=AsyncMock) as mock_retrieve:
+    with patch("app.domain.evaluation.retrieve_hybrid", new_callable=AsyncMock) as mock_retrieve:
         mock_retrieve.return_value = mock_hybrid_results
 
         payload = {

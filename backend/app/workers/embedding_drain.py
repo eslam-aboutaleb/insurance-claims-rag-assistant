@@ -26,7 +26,7 @@ from __future__ import annotations
 import sys
 
 from app.config import settings
-from app.rag.embedding_jobs import ClaimJobProcessor, SqlAlchemyJobStore
+from app.domain.claims.outbox import ClaimJobProcessor, SqlAlchemyJobStore
 from ragkit.jobs.drainer import main as _ragkit_main
 
 

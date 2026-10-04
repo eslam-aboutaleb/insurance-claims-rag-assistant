@@ -23,7 +23,7 @@ def test_main_wires_app_store_and_processor_into_ragkit_drainer() -> None:
     """The entry point builds the OmniCare store and processor and
     passes the validated drain settings to ragkit's drainer."""
     from app.config import settings
-    from app.rag.embedding_jobs import ClaimJobProcessor, SqlAlchemyJobStore
+    from app.domain.claims.outbox import ClaimJobProcessor, SqlAlchemyJobStore
 
     with patch.object(embedding_drain, "_ragkit_main", return_value=0) as mock_main:
         assert embedding_drain.main() == 0

@@ -82,7 +82,7 @@ async def test_ingest_writes_policy_chunks_with_ownership(clean_policy_tables) -
     """Ingestion stores chunks with the policy and version they belong to."""
     import asyncio
 
-    from app.rag.ingest import ingest_policy
+    from app.domain.policies.ingestion import ingest_policy
 
     count = await ingest_policy()
     assert count > 0, "ingestion produced no chunks"
@@ -112,7 +112,7 @@ async def test_ingest_writes_policy_chunks_with_ownership(clean_policy_tables) -
 @pytest.mark.asyncio
 async def test_ingest_is_idempotent(clean_policy_tables) -> None:
     """Re-running ingestion with an unchanged document does not duplicate chunks."""
-    from app.rag.ingest import ingest_policy
+    from app.domain.policies.ingestion import ingest_policy
 
     first = await ingest_policy()
     second = await ingest_policy()
@@ -144,7 +144,7 @@ async def test_ingest_surfaces_the_real_error_not_the_lock_cleanup() -> None:
     """
     from sqlalchemy.exc import DBAPIError
 
-    from app.rag import ingest as ingest_module
+    from app.domain.policies import ingestion as ingest_module
 
     real_error = DBAPIError(
         "INSERT INTO policy_versions (policy_id) VALUES (gen_random_uuid())",
@@ -159,8 +159,8 @@ async def test_ingest_surfaces_the_real_error_not_the_lock_cleanup() -> None:
     with (
         patch.object(ingest_module, "IngestionPipeline", return_value=mock_pipeline),
         patch.object(ingest_module, "FileDocumentSource", return_value=mock_source),
-        patch.object(ingest_module, "get_vector_store"),
-        patch.object(ingest_module, "EmbeddingFactory"),
+        patch("app.domain.embeddings.get_vector_store"),
+        patch("app.domain.embeddings.EmbeddingFactory"),
     ):
         with pytest.raises(DBAPIError) as excinfo:
             await ingest_module.ingest_policy()

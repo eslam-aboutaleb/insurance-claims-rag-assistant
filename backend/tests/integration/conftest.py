@@ -156,7 +156,7 @@ async def seeded_users() -> dict[str, uuid.UUID]:
 @pytest_asyncio.fixture(scope="function")
 async def seeded_policy() -> int:
     """Ingest the sample policy through the real ingestion path."""
-    from app.rag.ingest import ingest_policy
+    from app.domain.policies.ingestion import ingest_policy
 
     return await ingest_policy()
 
@@ -166,7 +166,7 @@ async def seeded_claims(
     seeded_users: dict[str, uuid.UUID],
 ) -> list[dict[str, Any]]:
     """Index the three seed claims into the claims vector store."""
-    from app.rag.claims_rag import ingest_claim
+    from app.domain.claims.ingest import ingest_claim
 
     seeded: list[dict[str, Any]] = []
     for claim in CLAIMS_SEED:

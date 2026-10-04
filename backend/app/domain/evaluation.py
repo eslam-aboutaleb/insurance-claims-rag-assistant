@@ -1,31 +1,40 @@
-"""
-Curated evaluation dataset for the OmniCare RAG system.
+"""OmniCare RAG evaluation wiring over ragkit (ragkit plan 07).
 
-The dataset **types** (``EvalSample``, ``Difficulty``,
-``QuestionCategory``) live in ragkit (ragkit plan 05);
-the curated OmniCare sample data below is domain test
-data and stays in the application, constructing ragkit's
-``EvalSample`` objects.
+The evaluation harness (retrieval metrics, answer judges,
+the two-phase runner) is domain-agnostic (ragkit); this
+module is the OmniCare binding: the curated evaluation
+dataset grounded in ``sample_policy.md`` and the
+``run_evaluation()`` entry point that wires the OmniCare
+hybrid retriever and dataset into ragkit's runner, so
+answer metrics are computed from the same retrieval
+context as the retrieval metrics.
 
-Contains labeled question-answer pairs grounded in the sample_policy.md document,
-with expected relevant sections and gold-standard answers for measuring both
-retrieval quality and answer generation quality.
-
-Each entry includes:
-  - query: A realistic user question
-  - expected_sections: Policy sections that should be retrieved
-  - gold_answer: A reference answer grounded in policy text
-  - category: Question type for stratified reporting
-  - difficulty: easy/medium/hard for granular analysis
+This module replaces the deprecated ``app.rag.eval_dataset``,
+``app.rag.eval_runner``, ``app.rag.evaluation``, and
+``app.rag.answer_evaluator`` shims (removed in plan 07).
 """
 
 from __future__ import annotations
 
+import logging
+from typing import Any
+
+from app.config import get_settings
+from app.domain.policies.retriever import retrieve_hybrid
 from ragkit.evaluation.dataset import (
     Difficulty,
     EvalSample,
     QuestionCategory,
 )
+from ragkit.evaluation.runner import (
+    EvalConfig,
+    EvalResult,
+    RetrievalFunction,
+    main as _ragkit_main,
+    run_evaluation as _ragkit_run_evaluation,
+)
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Curated evaluation dataset grounded in sample_policy.md
@@ -186,3 +195,61 @@ def get_eval_dataset(
     if difficulty is not None:
         dataset = [s for s in dataset if s.difficulty == difficulty]
     return dataset
+
+
+async def run_evaluation(config: EvalConfig | None = None) -> EvalResult:
+    """Run a complete RAG evaluation.
+
+    Wires the OmniCare hybrid retriever and the curated
+    evaluation dataset into ragkit's runner. Answer
+    metrics are computed from the same retrieval context
+    as the retrieval metrics (the runner never re-retrieves).
+
+    Args:
+        config: Evaluation configuration. If None, uses defaults
+            (end-to-end mode with heuristic judge).
+
+    Returns:
+        EvalResult with all metrics and per-sample details.
+    """
+    if config is None:
+        config = EvalConfig()
+
+    async def _retrieval_fn(query: str) -> list[dict[str, Any]]:
+        return await retrieve_hybrid(query=query, n_results=config.n_results)
+
+    return await _ragkit_run_evaluation(
+        config,
+        _retrieval_fn,
+        get_eval_dataset(category=config.category, difficulty=config.difficulty),
+        settings=get_settings(),
+    )
+
+
+async def _cli_runner(
+    config: EvalConfig,
+    retrieval_fn: RetrievalFunction | None,
+    dataset: list[Any] | None,
+    settings: Any = None,
+) -> EvalResult:
+    """Run a CLI-parsed evaluation with the OmniCare defaults injected."""
+    return await run_evaluation(config)
+
+
+def main() -> None:
+    """CLI entry point for running OmniCare RAG evaluation."""
+    _ragkit_main(runner=_cli_runner)
+
+
+__all__ = [
+    "Difficulty",
+    "EVAL_DATASET",
+    "EvalConfig",
+    "EvalResult",
+    "EvalSample",
+    "QuestionCategory",
+    "RetrievalFunction",
+    "get_eval_dataset",
+    "main",
+    "run_evaluation",
+]

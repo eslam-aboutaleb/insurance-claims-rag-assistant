@@ -16,8 +16,8 @@ from sqlalchemy import text
 
 from app.config import settings
 from app.database import async_session_factory
-from app.rag.ingest import ingest_policy
-from app.rag.vector_store import get_vector_store
+from app.domain.policies.ingestion import ingest_policy
+from app.domain.embeddings import get_vector_store
 from tests.integration.conftest import hash_embedding
 
 DISTANCE_THRESHOLD = 1.3

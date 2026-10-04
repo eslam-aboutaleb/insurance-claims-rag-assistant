@@ -28,7 +28,7 @@ from app.agent.agent import configure_llm
 from app.api.v1.router import router as v1_router
 from app.config import get_settings
 from app.middleware import RequestSizeLimitMiddleware
-from app.rag.ingest import ingest_policy
+from app.domain.policies.ingestion import ingest_policy
 from app.rate_limiter import limiter
 from app.schemas.models import ErrorDetail, ErrorResponse
 

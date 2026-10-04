@@ -24,6 +24,7 @@ dependencies = [
     "asyncpg>=0.29.0",
     "alembic>=1.13.0",
     "pgvector>=0.3.0",
+    "ragkit>=0.1.0",
 ]
 
 [tool.setuptools.packages.find]
@@ -67,8 +68,8 @@ ignore = [
 "app/agent/prompts.py" = [
     "E501",
 ]
-"app/rag/pgvector_store.py" = [
-    "S608",
+"app/agent/agent.py" = [
+    "PLW0603",
 ]
 "alembic/versions/*.py" = [
     "E501",

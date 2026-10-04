@@ -100,7 +100,7 @@ class TestClaimIDOR:
         mock_session.add = MagicMock()
         with (
             patch("app.agent.tools.submit_claim.async_session_factory") as mock_factory,
-            patch("app.rag.claims_rag.ingest_claim"),
+            patch("app.domain.claims.ingest.ingest_claim"),
         ):
             mock_factory.return_value.__aenter__.return_value = mock_session
             result = await prepare_claim_submission(
@@ -120,7 +120,7 @@ class TestClaimIDOR:
     async def test_search_claims_does_not_leak_other_users_claims(self):
         """Claims search only returns claims owned by current user."""
         from app.agent.context import current_user_id
-        from app.agent.tools.search_claims import search_claims
+        from app.domain.claims.tools import search_claims
 
         # Set context to User B
         user_b_id = uuid.UUID("00000000-0000-0000-0000-000000000002")
@@ -131,7 +131,7 @@ class TestClaimIDOR:
             {"document": "User B claim", "metadata": {"owner_id": str(user_b_id)}, "distance": 0.1}
         ]
 
-        with patch("app.agent.tools.search_claims.retrieve_claims_hybrid") as mock_retrieve:
+        with patch("app.domain.claims.tools.retrieve_claims_hybrid") as mock_retrieve:
             mock_retrieve.return_value = mock_b_claims
             result = await search_claims("water damage")
 
