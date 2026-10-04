@@ -11,6 +11,10 @@ dependencies = [
     "sqlalchemy[asyncio]>=2.0.30",
     "litellm>=1.84",
     "pydantic-settings>=2.7",
+]
+
+[project.optional-dependencies]
+test = [
     "pytest>=8.3",
     "pytest-asyncio>=0.24",
 ]

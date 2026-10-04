@@ -31,12 +31,23 @@ def sliding_window_chunk(
         text: The input text to split into chunks.
         chunk_size: Maximum number of words per chunk. Defaults to 600.
         overlap: Number of words to overlap between consecutive chunks.
-            Defaults to 100.
+            Defaults to 100. Must satisfy ``0 <= overlap < chunk_size``.
 
     Returns:
         list[str]: A list of text chunks. Returns an empty list if the input
         text is empty or contains no words.
+
+    Raises:
+        ValueError: If ``chunk_size`` is not positive or ``overlap`` is
+            outside ``[0, chunk_size)``.
     """
+    if chunk_size < 1:
+        raise ValueError(f"chunk_size must be >= 1; got {chunk_size}")
+    if not 0 <= overlap < chunk_size:
+        raise ValueError(
+            f"overlap must satisfy 0 <= overlap < chunk_size ({chunk_size}); got {overlap}"
+        )
+
     words = text.split()
     chunks = []
 
@@ -56,6 +67,22 @@ class SlidingWindowChunker:
     """Chunker that splits text into overlapping word-count windows."""
 
     def __init__(self, chunk_size: int = 600, overlap: int = 100) -> None:
+        """Configure the window size and overlap.
+
+        Args:
+            chunk_size: Maximum number of words per chunk.
+            overlap: Words shared between consecutive chunks.
+
+        Raises:
+            ValueError: If ``chunk_size`` is not positive or ``overlap``
+                is outside ``[0, chunk_size)``.
+        """
+        if chunk_size < 1:
+            raise ValueError(f"chunk_size must be >= 1; got {chunk_size}")
+        if not 0 <= overlap < chunk_size:
+            raise ValueError(
+                f"overlap must satisfy 0 <= overlap < chunk_size ({chunk_size}); got {overlap}"
+            )
         self.chunk_size = chunk_size
         self.overlap = overlap
 

@@ -8,8 +8,8 @@ load/hash/compare/retire/chunk/embed/upsert and talks to a
 :class:`ragkit.ingestion.VersionStore` protocol, which
 :class:`PolicyVersionStore` implements here against the
 OmniCare tables. This module is the permanent home for the
-binding; ``app.rag.ingest`` remains as a deprecated shim
-until plan 07 removes it.
+binding; the historical ``app.rag.ingest`` module was
+removed in plan 07.
 
 The stored snapshot carries ``chunker_version="v1"`` — the
 historical value — even though the chunker itself reports

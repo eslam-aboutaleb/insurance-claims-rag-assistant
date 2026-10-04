@@ -65,12 +65,13 @@ class JobPayload:
     completed_at: datetime | None = None
 
 
-def _claim_jobs(jobs: list[JobPayload], worker_id: str, now: datetime) -> None:
+def claim_jobs(jobs: list[JobPayload], worker_id: str, now: datetime) -> list[JobPayload]:
     """Transition claimed jobs to ``processing`` and stamp the lock.
 
     A failed job is first reset to ``pending`` so its retry bookkeeping
     starts clean; the lock columns then record which worker claimed it
-    and when, for :func:`reclaim_stale_jobs`.
+    and when, for :func:`reclaim_stale_jobs`. Returns the same job list
+    for call chaining.
     """
     for job in jobs:
         if job.status == "failed":
@@ -80,6 +81,7 @@ def _claim_jobs(jobs: list[JobPayload], worker_id: str, now: datetime) -> None:
         job.status = "processing"
         job.locked_at = now
         job.locked_by = worker_id
+    return jobs
 
 
 @runtime_checkable

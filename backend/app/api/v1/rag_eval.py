@@ -103,7 +103,7 @@ async def evaluate_rag(
         logger.exception("RAG evaluation failed: %s", exc)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"RAG evaluation failed: {exc}",
+            detail="RAG evaluation failed. See server logs for details.",
         ) from exc
 
 

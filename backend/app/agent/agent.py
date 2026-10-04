@@ -231,7 +231,7 @@ async def run_agent(user_id: str, message: str) -> dict[str, Any]:
     """
     Run the OmniCare agent with a user message and collect the response.
 
-    This is the synchronous entry point used by the non-streaming chat
+    This is the non-streaming entry point used by the chat
     endpoint. It runs the agent to completion, collects all tool calls,
     sources, and the final text response, and returns them as a dict.
 

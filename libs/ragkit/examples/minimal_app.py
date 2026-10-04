@@ -47,7 +47,6 @@ from ragkit.ingestion import (  # noqa: E402
     IngestionPipeline,
     IngestionSnapshot,
     VersionRecord,
-    VersionStore,
 )
 from ragkit.stores import InMemoryVectorStore  # noqa: E402
 
@@ -121,9 +120,7 @@ class MemoryVersionStore:
     async def close_active(self, session: Any) -> None:
         self.active = None
 
-    async def create_version(
-        self, session: Any, snapshot: IngestionSnapshot
-    ) -> VersionRecord:
+    async def create_version(self, session: Any, snapshot: IngestionSnapshot) -> VersionRecord:
         self.active = VersionRecord(
             version_id=f"example-{uuid.uuid4().hex[:8]}",
             snapshot=snapshot,

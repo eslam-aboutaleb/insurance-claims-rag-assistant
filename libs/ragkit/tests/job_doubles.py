@@ -12,7 +12,7 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from ragkit.jobs.outbox import JobPayload, _claim_jobs
+from ragkit.jobs.outbox import JobPayload, claim_jobs
 
 
 class FakeJobStore:
@@ -65,7 +65,7 @@ class FakeJobStore:
         return claimable[:limit]
 
     async def mark_processing(self, jobs: list[JobPayload], worker_id: str) -> list[JobPayload]:
-        _claim_jobs(jobs, worker_id, datetime.now(UTC))
+        claim_jobs(jobs, worker_id, datetime.now(UTC))
         return jobs
 
     async def mark_completed(self, job: JobPayload) -> None:

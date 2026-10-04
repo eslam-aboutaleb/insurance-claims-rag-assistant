@@ -33,7 +33,9 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-omnicare_password}
       POSTGRES_DB: ${POSTGRES_DB:-omnicare}
     ports:
-      - "5432:5432"
+      # Bind to loopback only: the dev database must not be reachable
+      # from the local network (matches the production compose file).
+      - "127.0.0.1:5432:5432"
     volumes:
       - pg_data_dev:/var/lib/postgresql/data
     healthcheck:
@@ -48,8 +50,10 @@ services:
   # Source code is mounted as a volume so changes take effect immediately.
   backend:
     build:
-      context: ./backend
-      dockerfile: Dockerfile.dev
+      # Build from the repository root so the Dockerfile can copy
+      # libs/ragkit (the backend depends on the local ragkit library).
+      context: .
+      dockerfile: backend/Dockerfile.dev
     container_name: omnicare-backend-dev
     restart: unless-stopped
     ports:

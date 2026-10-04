@@ -210,6 +210,18 @@ class IngestionPipeline:
             )
             return count
 
+        chunks = self._chunk(documents)
+        if not chunks:
+            # Abort before touching the version table or the
+            # search index: a version row carrying the current
+            # snapshot would make every later run skip this
+            # source forever (the snapshot would compare equal),
+            # leaving it permanently un-ingested. Aborting here
+            # keeps the previous version active so the index
+            # still reflects it and the next run retries.
+            logger.warning("No chunks extracted from source. Ingestion aborted.")
+            return 0
+
         if active is not None:
             # Close the old active version and remove its
             # chunks from the search index. chunk_id is
@@ -223,11 +235,6 @@ class IngestionPipeline:
             await version_store.delete_chunks(session, active.version_id)
 
         version = await version_store.create_version(session, current_snapshot)
-
-        chunks = self._chunk(documents)
-        if not chunks:
-            logger.warning("No chunks extracted from source. Ingestion aborted.")
-            return 0
 
         embeddings = await self._embedder([chunk.text for chunk in chunks])
         embedding_dim = get_embedding_dimension(self._settings.embedding_model)

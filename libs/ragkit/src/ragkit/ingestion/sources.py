@@ -14,8 +14,10 @@ protocol and pass the source to
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Protocol, runtime_checkable
 
 logger = logging.getLogger(__name__)
@@ -69,15 +71,21 @@ class FileDocumentSource:
         ``ingest_policy`` behavior for a missing policy
         file).
 
+        The read runs in a worker thread so a large file
+        never blocks the event loop.
+
         Returns:
             One document named after the file, or an empty
             list when the file does not exist.
         """
         try:
-            with open(self._path, encoding=self._encoding) as f:
-                content = f.read()
+            content = await asyncio.to_thread(self._read)
         except FileNotFoundError:
             logger.warning("Document not found at '%s'; skipping.", self._path)
             return []
-        source_name = self._path.rsplit("/", maxsplit=1)[-1]
-        return [RawDocument(source_name=source_name, content=content)]
+        return [RawDocument(source_name=Path(self._path).name, content=content)]
+
+    def _read(self) -> str:
+        """Read the file contents (runs in a worker thread)."""
+        with open(self._path, encoding=self._encoding) as f:
+            return f.read()

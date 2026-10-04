@@ -8,6 +8,7 @@ instead of module-level singletons, so the tests inject mocks
 at construction time rather than patching module attributes.
 """
 
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -86,21 +87,33 @@ async def test_hybrid_search_with_empty_embedding():
 
 
 @pytest.mark.asyncio
-async def test_hybrid_search_with_extra_where():
-    mock_session = _mocked_session(
-        [
-            _mock_row(
-                {
-                    "id": "1",
-                    "document": "test doc",
-                    "distance": 0.5,
-                    "rrf_score": 0.8,
-                }
-            )
-        ]
-    )
+async def test_hybrid_search_with_owner_filter():
+    """hybrid_search applies equality filters as bound parameters.
 
-    store, _factory = _make_store(mock_session, table_name="claims", embedding_fn=AsyncMock())
+    The owner filter must appear in the generated SQL as a
+    namespaced bind parameter (``filter_owner_id``) carrying the
+    caller's value, so results are scoped to the owner.
+    """
+    captured: dict[str, Any] = {}
+
+    class _SpySession:
+        async def execute(self, stmt, params=None):  # noqa: ANN001, ANN202, ARG002
+            captured["stmt"] = stmt
+            captured["params"] = params
+            result = MagicMock()
+            result.mappings.return_value.all.return_value = [
+                _mock_row(
+                    {
+                        "id": "1",
+                        "document": "test doc",
+                        "distance": 0.5,
+                        "rrf_score": 0.8,
+                    }
+                )
+            ]
+            return result
+
+    store, _factory = _make_store(_SpySession(), table_name="claims")
 
     result = await store.hybrid_search(
         query="test",
@@ -109,25 +122,118 @@ async def test_hybrid_search_with_extra_where():
         threshold=1.3,
         text_field="description",
         metadata_fields=["claim_id"],
-        extra_where="owner_id = :owner_id",
-        extra_params={"owner_id": "user-123"},
+        owner_id="user-123",
     )
     assert len(result) == 1
+    assert "owner_id = :filter_owner_id" in str(captured["stmt"])
+    assert captured["params"]["filter_owner_id"] == "user-123"
 
 
 @pytest.mark.asyncio
-async def test_count_with_extra_where():
-    mock_session = AsyncMock()
-    mock_result = MagicMock()
-    mock_result.scalar_one.return_value = 5
-    mock_session.execute.return_value = mock_result
+async def test_hybrid_search_filter_cannot_shadow_reserved_params():
+    """A filter key named like a reserved bind parameter cannot clobber it.
 
-    store, _factory = _make_store(mock_session, table_name="claims")
+    ``distance_threshold`` is a reserved bind parameter (the vector
+    distance cutoff) but NOT a function parameter, so a filter with
+    that key must be namespaced to ``filter_distance_threshold`` and
+    leave the real threshold intact.
+    """
+    captured: dict[str, Any] = {}
 
-    count = await store.count(
-        extra_where="owner_id = :owner_id", extra_params={"owner_id": "user-123"}
+    class _SpySession:
+        async def execute(self, stmt, params=None):  # noqa: ANN001, ANN202, ARG002
+            captured["stmt"] = stmt
+            captured["params"] = params
+            result = MagicMock()
+            result.mappings.return_value.all.return_value = []
+            return result
+
+    store, _factory = _make_store(_SpySession(), table_name="claims")
+
+    await store.hybrid_search(
+        query="water damage",
+        embedding=[0.1] * 1536,
+        n_results=5,
+        threshold=1.3,
+        distance_threshold=0.0,
     )
+    assert captured["params"]["distance_threshold"] == 1.3
+    assert captured["params"]["filter_distance_threshold"] == 0.0
+
+
+@pytest.mark.asyncio
+async def test_hybrid_search_rejects_non_positive_n_results():
+    """A non-positive ``n_results`` is rejected instead of disabling LIMIT."""
+    store, _factory = _make_store(AsyncMock(), table_name="claims")
+    with pytest.raises(ValueError, match="n_results must be a positive integer"):
+        await store.hybrid_search(
+            query="test",
+            embedding=[0.1] * 1536,
+            n_results=0,
+            threshold=1.3,
+        )
+    with pytest.raises(ValueError, match="n_results must be a positive integer"):
+        await store.hybrid_search(
+            query="test",
+            embedding=[0.1] * 1536,
+            n_results=-1,
+            threshold=1.3,
+        )
+
+
+@pytest.mark.asyncio
+async def test_count_with_owner_filter():
+    """count applies equality filters as bound parameters."""
+    captured: dict[str, Any] = {}
+
+    class _SpySession:
+        async def execute(self, stmt, params=None):  # noqa: ANN001, ANN202, ARG002
+            captured["stmt"] = stmt
+            captured["params"] = params
+            result = MagicMock()
+            result.scalar_one.return_value = 5
+            return result
+
+    store, _factory = _make_store(_SpySession(), table_name="claims")
+
+    count = await store.count(owner_id="user-123")
     assert count == 5
+    assert "owner_id = :filter_owner_id" in str(captured["stmt"])
+    assert captured["params"]["filter_owner_id"] == "user-123"
+
+
+@pytest.mark.asyncio
+async def test_upsert_metadata_key_equal_to_column_name():
+    """A metadata key equal to a column name cannot shadow the column.
+
+    A document whose metadata contains ``text`` must not overwrite
+    the ``text`` column's bind value: column parameters carry a
+    ``_col_`` prefix, metadata parameters do not.
+    """
+    captured: dict[str, Any] = {}
+
+    class _SpySession:
+        async def execute(self, stmt, params=None):  # noqa: ANN001, ANN202, ARG002
+            captured["stmt"] = stmt
+            captured["params"] = params
+            result = MagicMock()
+            return result
+
+    store, _factory = _make_store(_SpySession(), table_name="claims")
+
+    await store.upsert(
+        [
+            {
+                "id": "1",
+                "text": "real text",
+                "embedding": [0.1] * 1536,
+                "metadata": {"text": "shadow attempt"},
+            }
+        ],
+        session=_SpySession(),
+    )
+    assert captured["params"]["_col_text__0"] == "real text"
+    assert captured["params"]["text__0"] == "shadow attempt"
 
 
 @pytest.mark.asyncio

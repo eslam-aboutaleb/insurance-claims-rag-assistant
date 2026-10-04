@@ -239,7 +239,9 @@ class Settings(BaseSettings):
         # consistently regardless of the current working directory.
         env_file=str(Path(__file__).resolve().parents[2] / ".env"),
         env_file_encoding="utf-8",
-        extra="ignore",  # Reject unknown env vars to catch typos early,
+        # Unknown env vars are silently ignored so deployments can pass
+        # extra infrastructure variables without breaking startup.
+        extra="ignore",
         case_sensitive=False,
     )
 

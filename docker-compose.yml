@@ -33,7 +33,7 @@ services:
       # Database credentials loaded from .env file with fallback defaults.
       # POSTGRES_PASSWORD is required and must be set in .env for production.
       POSTGRES_USER: ${POSTGRES_USER:-omnicare}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required in .env}
       POSTGRES_DB: omnicare
     ports:
       # Published on a configurable host port, and bound to loopback only. The default is
@@ -61,8 +61,10 @@ services:
   # and PostgreSQL persistence. Policy ingestion runs automatically on startup.
   backend:
     build:
-      context: ./backend
-      dockerfile: Dockerfile
+      # Build from the repository root so the Dockerfile can copy
+      # libs/ragkit (the backend depends on the local ragkit library).
+      context: .
+      dockerfile: backend/Dockerfile
     container_name: omnicare-backend
     restart: unless-stopped
     ports:
@@ -95,8 +97,9 @@ services:
   # SKIP LOCKED, so additional replicas scale without coordination.
   embedding-drain:
     build:
-      context: ./backend
-      dockerfile: Dockerfile
+      # Same root context as the backend: the drainer imports ragkit.
+      context: .
+      dockerfile: backend/Dockerfile
     container_name: omnicare-embedding-drain
     restart: unless-stopped
     command: ["python", "-m", "app.workers.embedding_drain"]

@@ -6,6 +6,7 @@ lifespan events (database migrations and RAG ingestion on startup), and mounts
 the v1 API router.
 """
 
+import asyncio
 import logging
 import subprocess
 import sys
@@ -56,7 +57,10 @@ async def _run_alembic_migrations() -> None:
     """
     backend_dir = Path(__file__).resolve().parents[1]
     try:
-        result = subprocess.run(  # noqa: S603
+        # Run in a worker thread: subprocess.run blocks for up to
+        # the timeout, and this runs inside the async lifespan.
+        result = await asyncio.to_thread(  # noqa: S603
+            subprocess.run,
             [sys.executable, "-m", "alembic", "upgrade", "head"],
             cwd=backend_dir,
             capture_output=True,

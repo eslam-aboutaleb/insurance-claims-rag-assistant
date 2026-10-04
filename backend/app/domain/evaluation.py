@@ -228,11 +228,17 @@ async def run_evaluation(config: EvalConfig | None = None) -> EvalResult:
 
 async def _cli_runner(
     config: EvalConfig,
-    retrieval_fn: RetrievalFunction | None,
-    dataset: list[Any] | None,
-    settings: Any = None,
+    _retrieval_fn: RetrievalFunction | None,
+    _dataset: list[Any] | None,
+    _settings: Any = None,
 ) -> EvalResult:
-    """Run a CLI-parsed evaluation with the OmniCare defaults injected."""
+    """Run a CLI-parsed evaluation with the OmniCare defaults injected.
+
+    The runner signature is mandated by ragkit's CLI
+    (``runner(config, retrieval_fn, dataset, settings)``); the
+    OmniCare harness derives the dataset and settings from the
+    config itself, so the latter three arguments are unused.
+    """
     return await run_evaluation(config)
 
 

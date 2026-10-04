@@ -172,7 +172,7 @@ async def seeded_claims(
     for claim in CLAIMS_SEED:
         claim_uuid = uuid.uuid4()
         await ingest_claim(
-            id=claim_uuid,
+            claim_uuid=claim_uuid,
             claim_id=claim["claim_id"],
             owner_id=seeded_users[claim["owner"]],
             claim_type=claim["claim_type"],

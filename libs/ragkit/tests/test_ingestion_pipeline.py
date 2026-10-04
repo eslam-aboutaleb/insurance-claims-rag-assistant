@@ -509,9 +509,10 @@ async def test_run_without_chunks_aborts_ingestion() -> None:
 
     assert count == 0
     assert store.upserted == []
-    # The version row was created before chunking aborted the run,
-    # matching the historical _do_ingest behavior.
-    assert len(version_store.created) == 1
+    # No version row may be created when chunking aborts: a
+    # version carrying the current snapshot would make every
+    # later run skip the source forever.
+    assert version_store.created == []
 
 
 def test_version_store_protocol_is_runtime_checkable() -> None:

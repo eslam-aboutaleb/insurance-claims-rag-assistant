@@ -76,10 +76,45 @@ class TestSlidingWindowChunk:
             "w6 w7 w8 w9",
         ]
 
+    def test_zero_chunk_size_is_rejected(self) -> None:
+        with pytest.raises(ValueError, match="chunk_size must be >= 1"):
+            sliding_window_chunk("hello", chunk_size=0)
+
+    def test_negative_chunk_size_is_rejected(self) -> None:
+        with pytest.raises(ValueError, match="chunk_size must be >= 1"):
+            sliding_window_chunk("hello", chunk_size=-3)
+
+    def test_overlap_equal_to_chunk_size_is_rejected(self) -> None:
+        """overlap == chunk_size makes the step zero (range() error)."""
+        with pytest.raises(ValueError, match="overlap must satisfy"):
+            sliding_window_chunk("hello world", chunk_size=4, overlap=4)
+
+    def test_overlap_greater_than_chunk_size_is_rejected(self) -> None:
+        """overlap > chunk_size would silently yield no chunks."""
+        with pytest.raises(ValueError, match="overlap must satisfy"):
+            sliding_window_chunk("hello world", chunk_size=4, overlap=5)
+
+    def test_negative_overlap_is_rejected(self) -> None:
+        with pytest.raises(ValueError, match="overlap must satisfy"):
+            sliding_window_chunk("hello world", chunk_size=4, overlap=-1)
+
+    def test_zero_overlap_is_allowed(self) -> None:
+        chunks = sliding_window_chunk("a b c d", chunk_size=2, overlap=0)
+
+        assert chunks == ["a b", "c d"]
+
 
 class TestSlidingWindowChunker:
     def test_version(self) -> None:
         assert SlidingWindowChunker().version == "sliding-window-v1"
+
+    def test_constructor_rejects_overlap_equal_to_chunk_size(self) -> None:
+        with pytest.raises(ValueError, match="overlap must satisfy"):
+            SlidingWindowChunker(chunk_size=100, overlap=100)
+
+    def test_constructor_rejects_non_positive_chunk_size(self) -> None:
+        with pytest.raises(ValueError, match="chunk_size must be >= 1"):
+            SlidingWindowChunker(chunk_size=0)
 
     def test_config_exposes_chunk_size_and_overlap(self) -> None:
         chunker = SlidingWindowChunker(chunk_size=600, overlap=100)

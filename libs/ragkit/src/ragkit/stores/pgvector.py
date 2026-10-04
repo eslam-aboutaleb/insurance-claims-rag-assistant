@@ -191,6 +191,9 @@ class PgVectorStore(VectorStore):
         for field in metadata_fields:
             validate_identifier(field, "metadata_field")
 
+        if n_results < 1:
+            raise ValueError(f"n_results must be a positive integer; got {n_results}")
+
         if not embedding:
             if self._embedding_fn is None:
                 raise ValueError(
@@ -267,14 +270,18 @@ class PgVectorStore(VectorStore):
             "distance_threshold": threshold,
             "n_results": n_results,
         }
+        # Filter parameters are namespaced with a ``filter_`` prefix so a
+        # filter key can never shadow the reserved bind parameters above
+        # (``query``, ``embedding``, ``distance_threshold``, ``n_results``).
         filter_parts: list[str] = []
         for key, value in filters.items():
-            filter_parts.append(f"{key} = :{key}")
-            params[key] = value
+            param_name = f"filter_{key}"
+            filter_parts.append(f"{key} = :{param_name}")
+            params[param_name] = value
 
         extra_where = " AND ".join(filter_parts) if filter_parts else None
         if extra_where:
-            join_conditions.append(" AND ".join(f"v.{key} = :{key}" for key in filters))
+            join_conditions.append(" AND ".join(f"v.{key} = :filter_{key}" for key in filters))
 
         join_sql = " AND ".join(join_conditions)
 
@@ -390,8 +397,9 @@ class PgVectorStore(VectorStore):
         params: dict[str, Any] = {}
         filter_parts: list[str] = []
         for key, value in filters.items():
-            filter_parts.append(f"{key} = :{key}")
-            params[key] = value
+            param_name = f"filter_{key}"
+            filter_parts.append(f"{key} = :{param_name}")
+            params[param_name] = value
 
         where_clause = f"WHERE {' AND '.join(filter_parts)}" if filter_parts else ""
 
@@ -456,7 +464,10 @@ class PgVectorStore(VectorStore):
         for idx, doc in enumerate(documents):
             row_placeholders = []
             for key in [id_field, text_field, embedding_field]:
-                param_name = f"{key}__{idx}"
+                # Column parameters use a ``_col_`` prefix so a metadata
+                # (or extra) key equal to a column name can never shadow
+                # the column's bind value.
+                param_name = f"_col_{key}__{idx}"
                 if key == id_field:
                     params[param_name] = doc.get("id")
                 elif key == embedding_field:
@@ -470,7 +481,7 @@ class PgVectorStore(VectorStore):
                 row_placeholders.append(f":{param_name}")
             if extra_fields:
                 for extra_key, extra_val in extra_fields.items():
-                    param_name = f"{extra_key}__{idx}"
+                    param_name = f"_extra_{extra_key}__{idx}"
                     params[param_name] = extra_val
                     row_placeholders.append(f":{param_name}")
             values_clauses.append(f"({', '.join(row_placeholders)})")

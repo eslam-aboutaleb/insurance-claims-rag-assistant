@@ -6,8 +6,8 @@ vector store (the binding lives in
 embedded, the embedding is validated against the
 configured dimension, and the claim row is upserted
 with its metadata. This module is the permanent home
-for the binding; ``app.rag.claims_rag`` remains as a
-deprecated shim until plan 07 removes it.
+for the binding; the historical ``app.rag.claims_rag``
+module was removed in plan 07.
 """
 
 from __future__ import annotations
@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 
 
 async def ingest_claim(  # noqa: PLR0913, PLR0917
-    id: uuid.UUID,
+    claim_uuid: uuid.UUID,
     claim_id: str,
     owner_id: uuid.UUID,
     claim_type: str,
@@ -40,7 +40,7 @@ async def ingest_claim(  # noqa: PLR0913, PLR0917
     """Ingest a single claim into the vector store.
 
     Args:
-        id: Internal UUID of the claim row.
+        claim_uuid: Internal UUID of the claim row.
         claim_id: Human-readable claim identifier.
         owner_id: UUID of the user who owns the claim.
         claim_type: Category of the claim.
@@ -68,7 +68,7 @@ async def ingest_claim(  # noqa: PLR0913, PLR0917
     await store.upsert(
         documents=[
             {
-                "id": str(id),
+                "id": str(claim_uuid),
                 "text": text_content,
                 "embedding": embedding,
                 "metadata": {
@@ -98,7 +98,7 @@ async def ingest_all_claims() -> None:
 
         for claim in claims:
             await ingest_claim(
-                id=claim.id,
+                claim_uuid=claim.id,
                 claim_id=claim.claim_id,
                 owner_id=claim.owner_id,
                 claim_type=claim.claim_type,

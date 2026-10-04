@@ -49,8 +49,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import async_session_factory
 from app.domain.claims.retriever import CLAIMS_RETRIEVER_SPEC
-from ragkit.jobs import JobPayload, enqueue_job
-from ragkit.jobs.outbox import _claim_jobs
+from ragkit.jobs import JobPayload, claim_jobs, enqueue_job
 from ragkit.jobs import (
     process_pending_jobs as _ragkit_process_pending_jobs,
     reclaim_stale_jobs as _ragkit_reclaim_stale_jobs,
@@ -92,8 +91,13 @@ class SqlAlchemyJobStore:
     def __init__(self, session_factory: Any = None) -> None:
         self._session_factory = session_factory or async_session_factory
 
-    async def claim_pending(self, limit: int, worker_id: str) -> list[JobPayload]:
-        """Select claimable jobs with ``FOR UPDATE SKIP LOCKED``."""
+    async def claim_pending(self, limit: int, _worker_id: str) -> list[JobPayload]:
+        """Select claimable jobs with ``FOR UPDATE SKIP LOCKED``.
+
+        ``worker_id`` is part of the ``EmbeddingJobStore`` protocol
+        but is not needed here: the lock columns are stamped by
+        :func:`claim_jobs` after selection.
+        """
         from sqlalchemy import select  # noqa: PLC0415
 
         from app.models.embedding_job import EmbeddingJob  # noqa: PLC0415
@@ -132,7 +136,7 @@ class SqlAlchemyJobStore:
             return []
 
         now = datetime.now(UTC)
-        _claim_jobs(jobs, worker_id, now)
+        claim_jobs(jobs, worker_id, now)
 
         claimed: list[JobPayload] = []
         async with self._session_factory() as session:

@@ -214,7 +214,7 @@ Powered by **Google Agent Development Kit (ADK)** and **LiteLLM**, the assistant
     docker compose up --build
     ```
 
-    Docker Compose builds the backend and React/Vite frontend. The frontend waits for the backend health check (`/api/v1/health`) to report `healthy` before accepting traffic.
+    Docker Compose builds and starts four services: the PostgreSQL 16 (pgvector) database, the FastAPI backend, the `embedding-drain` worker (drains the embedding-job outbox), and the React/Vite frontend. The backend and worker wait for the database health check; the frontend waits for the backend health check (`/api/v1/health`) to report `healthy` before accepting traffic. The database is published on `127.0.0.1:15432` (loopback only) to avoid colliding with a local PostgreSQL on 5432.
 
 4. **Open the Application**
     Navigate to [http://localhost:3000](http://localhost:3000) in your browser. The backend will automatically:
@@ -231,6 +231,25 @@ Powered by **Google Agent Development Kit (ADK)** and **LiteLLM**, the assistant
 | **Google ADK** _(Agent Development Kit)_ | **Enterprise Agent Framework** -- Standardized, resilient agent orchestration engine providing native session tracking, tool execution loops, and guardrails. | _ **Native Tool Orchestration**: Converts standard Python functions directly into model-consumable tool definitions.<br>_ **Multi-Turn Session State**: First-class `InMemorySessionService` cleanly isolates user conversations with FIFO eviction (max 500 sessions).<br>_ **Model Agnostic**: Seamlessly interfaces with third-party providers via LiteLLM.<br>_ **Clean Pattern**: Separates system instructions, tool definitions, and runtime execution. |
 | **LiteLLM**                              | **Universal LLM Proxy & Router** -- Decouples the core agent code from vendor-specific LLM APIs.                                                              | _ **100+ Provider Support**: Switch effortlessly between OpenAI, Anthropic, Google Gemini, Azure, and open-source models.<br>_ **Zero Code Changes**: Change the model with a single environment variable (`LLM_MODEL`).<br>\* **Standardized Input/Output**: Normalizes API schemas, cost tracking, and error handling across providers.                                                                                |
 | **pgvector**                          | **PostgreSQL Vector Extension** -- Native pgvector extension inside PostgreSQL for hybrid vector + PostgreSQL full-text search with Reciprocal Rank Fusion. | _ **Unified Storage**: Embeddings and keyword search live in the same Postgres instance as claims and conversations.<br>_ **Hybrid Search**: Combines vector similarity (HNSW) with PostgreSQL full-text search (tsvector/tsquery) using RRF for robust retrieval.<br>_ **No External Service**: Eliminates the need for a separate vector database process or Docker volume.                                                                                   |
+| **ragkit** _(libs/ragkit)_           | **Domain-Agnostic RAG Toolkit** -- Installable library (uv workspace member) carrying every generic RAG primitive: chunking, embeddings, vector stores, ingestion, evaluation, and the job outbox. | _ **Clean Separation**: OmniCare-specific bindings live in `backend/app/domain/`; generic machinery lives in `ragkit`.<br>_ **Library Isolation**: ragkit never imports `app.*` (enforced by `tests/test_no_app_imports.py`).<br>_ **Reusable**: Any FastAPI/SQLAlchemy service can adopt it; see `libs/ragkit/README.md`. |
+
+### The ragkit Library (`libs/ragkit`)
+
+The RAG subsystem is extracted into an installable, domain-agnostic library so the retrieval machinery can be reused (and tested) independently of OmniCare's schema. The repository is a [uv workspace](https://docs.astral.sh/uv/concepts/workspaces/): the root `pyproject.toml` declares `backend` and `libs/ragkit` as members, so `backend` resolves `ragkit` from the local source tree.
+
+| ragkit module            | Responsibility                                                                                              |
+| :----------------------- | :---------------------------------------------------------------------------------------------------------- |
+| `ragkit.chunking`        | `MarkdownSectionChunker`, `SlidingWindowChunker`, and the chunker registry                                  |
+| `ragkit.embeddings`      | `EmbeddingFunction` protocol, LiteLLM implementation, dimension validation, provider registry               |
+| `ragkit.stores`          | `PgVectorStore` (hybrid vector + PostgreSQL full-text search with RRF) and an in-memory store               |
+| `ragkit.ingestion`       | `IngestionPipeline` (hash/compare/retire/chunk/embed/upsert), document sources, snapshot versioning, locking |
+| `ragkit.jobs`            | Outbox `EmbeddingJobStore` protocol, `process_pending_jobs`, `reclaim_stale_jobs`, drainer CLI              |
+| `ragkit.evaluation`      | RAG evaluation harness: retrieval metrics (precision/recall@k, MRR) and LLM-judged answer metrics           |
+| `ragkit.validation`      | SQL identifier allowlist and embedding dimension checks                                                     |
+
+**Domain adapters** (`backend/app/domain/`) bind ragkit to OmniCare's tables: `domain/policies/` owns policy versioning and ingestion, `domain/claims/` owns claim ingestion, the embedding-job outbox, and owner-scoped claim retrieval, and `domain/embeddings.py` wires the embedding function and vector store. The claims adapter always passes `owner_id` as a retrieval filter, so cross-user data leakage is structurally impossible.
+
+**Embedding drain worker** (`embedding-drain` service): claim embeddings never block claim submission. `POST /api/v1/claims/confirm` writes the claim and its `embedding_jobs` row in the same transaction (outbox pattern); the drainer worker claims pending jobs with `FOR UPDATE SKIP LOCKED`, generates the embedding, and upserts it into pgvector. Multiple drainer replicas scale without coordination, and jobs stuck in `processing` past `JOB_STALE_AFTER_SECONDS` are reclaimed automatically.
 
 ---
 
@@ -402,18 +421,19 @@ Configure these settings in `.env` (or pass via container environment):
 
 ## Running Tests
 
-OmniCare Financial includes automated tests with Pytest covering authentication, RAG ingestion, vector retrieval, agent tool execution, idempotency, and API endpoints.
+OmniCare Financial includes automated tests with Pytest covering authentication, RAG ingestion, vector retrieval, agent tool execution, idempotency, and API endpoints. The backend suite (410 tests) runs against a dedicated test database (`OMNICARE_TEST_DATABASE_URL`); the ragkit suite (231 tests) runs inside `libs/ragkit`. Together they exercise core paths and corner cases (empty inputs, invalid parameters, locking, stale-job reclaim, versioning, and cross-user isolation).
 
 ### Run Tests Locally
 
 ```bash
-# Navigate to the backend directory
+# Backend tests (from the repository root; the uv workspace
+# resolves ragkit from libs/ragkit)
 cd backend
-
-# Install dependencies (if not using Docker)
 uv pip install -e .
+python -m pytest tests/ -v
 
-# Run all tests
+# ragkit library tests
+cd libs/ragkit
 python -m pytest tests/ -v
 ```
 
@@ -423,6 +443,8 @@ python -m pytest tests/ -v
 cd backend
 python -m pytest tests/ --cov=app --cov-report=term-missing
 ```
+
+The backend suite maintains **98% line coverage** of `app/` (target: >90%).
 
 ### Run Tests Inside Docker Container
 
@@ -447,6 +469,8 @@ docker-compose exec backend pytest tests/ -v
 | `tests/test_security_isolation.py` | Cross-user data isolation, horizontal privilege escalation |
 | `tests/test_llm_e2e.py` | End-to-end LLM integration tests |
 
+**ragkit test suite** (`libs/ragkit/tests/`): chunking semantics, pgvector hybrid search (including owner-filter binding and reserved-parameter collision guards), ingestion pipeline, snapshot versioning, advisory locking, job reclaim, evaluation metrics, and the library-isolation invariant (`test_no_app_imports.py`).
+
 ---
 
 ## Project Structure
@@ -455,17 +479,21 @@ docker-compose exec backend pytest tests/ -v
 omnicare-financial/
 +-- .env.example                    # Template for environment configuration
 +-- .gitignore                      # Git exclusion rules (Python, Node, Docker)
++-- .dockerignore                   # Root build context filter (backend images)
 +-- .pre-commit-config.yaml         # Pre-commit hooks (ruff, prettier)
 +-- docker-compose.yml              # Multi-container orchestration & networking
 +-- docker-compose.dev.yml          # Development overrides
++-- pyproject.toml                  # uv workspace root (backend + libs/ragkit)
 +-- README.md                       # Comprehensive project documentation
 +-- sonar-project.properties        # SonarQube configuration
++-- Makefile                        # Baseline harness targets (Tier A/B/C)
 |
 +-- backend/                        # FastAPI + Google ADK Agent Service
-|   +-- Dockerfile                  # Python 3.11-slim container build with pre-indexing
+|   +-- Dockerfile                  # Python 3.11-slim production image (uv-only)
+|   +-- Dockerfile.dev              # Development image with hot reload
 |   +-- .dockerignore               # Backend build context filter
 |   +-- pyproject.toml              # Build tool specifications
-|   +-- requirements.txt            # Python dependencies
+|   +-- uv.lock                     # Locked backend dependencies
 |   +-- alembic/                    # Database migration version control
 |   |   +-- env.py                  # Alembic environment configuration
 |   |   +-- script.py.mako          # Migration template
@@ -474,62 +502,73 @@ omnicare-financial/
 |   |       +-- a1b2c3d4e5f6_add_pgvector_embeddings.py
 |   |       +-- 822df1979a12_add_conversation_messages_claim_.py
 |   +-- app/
-|       +-- __init__.py             # Package init
-|       +-- config.py               # Pydantic Settings configuration loader
-|       +-- main.py                 # FastAPI application, CORS, lifespan hooks
-|       +-- database.py             # SQLAlchemy async engine & session factory
-|       +-- auth.py                 # JWT auth, Argon2 hashing, cookie management
-|       +-- middleware.py           # Request size limit middleware
-|       +-- rate_limiter.py         # SlowAPI rate limiting configuration
-|       +-- idempotency.py          # Request idempotency cache with TTL
-|       +-- agent/                  # Google ADK Agent definition
-|       |   +-- __init__.py         # Agent package init
-|       |   +-- agent.py            # LlmAgent initialization, session runner, event loop
-|       |   +-- context.py          # Async context variables (current_user_id)
-|       |   +-- prompts.py          # System instructions & security injection defenses
-|       |   +-- conversation_store.py # Conversation persistence helpers
-|       |   +-- tools/              # Agent tools
-|       |       +-- __init__.py     # Tools package init
-|       |       +-- policy_rag.py   # query_policy tool (RAG search)
-|       |       +-- claim_status.py # get_claim_status tool (owner-scoped lookup)
-|       |       +-- search_claims.py # search_claims tool (natural language claims search)
-|       |       +-- submit_claim.py # prepare_claim_submission tool + submit_claim_internal
-|       +-- api/                    # REST API endpoints
-|       |   +-- __init__.py         # API package init
-|       |   +-- v1/
-|       |       +-- __init__.py     # API v1 package init
-|       |       +-- router.py       # API v1 route aggregator
-|       |       +-- chat.py         # POST /api/v1/chat + /chat/reset endpoints
-|       |       +-- chat_stream.py  # POST /api/v1/chat/stream (SSE)
-|       |       +-- health.py       # GET /api/v1/health check endpoint
-|       |       +-- auth.py         # POST /signup, /signin, /logout, /me
-|       |       +-- conversations.py # GET /chat/conversations, /chat/conversations/{id}
-|       |       +-- claims.py       # POST /claims/prepare, /claims/confirm
-|       +-- data/                   # Policy documents
-|       |   +-- sample_policy.md    # Source policy document for RAG
-|       +-- rag/                    # Retrieval-Augmented Generation subsystem
-|       |   +-- __init__.py         # RAG package init
-|       |   +-- pgvector_store.py   # pgvector hybrid search implementation
-|       |   +-- vector_store.py     # VectorStore interface abstraction
-|       |   +-- retriever.py        # Policy hybrid retrieval orchestrator
-|       |   +-- claims_rag.py       # Claims hybrid retrieval & ingestion
-|       |   +-- ingest.py           # Markdown chunker & pgvector indexing
-|       |   +-- embedding.py        # Embedding factory (LiteLLM wrapper)
-|       |   +-- embedding_jobs.py   # Background embedding job processing
-|       |   +-- evaluation.py       # RAG evaluation metrics
-|       +-- models/                 # SQLAlchemy ORM models
-|       |   +-- __init__.py         # Models package init
-|       |   +-- base.py             # Declarative base with common columns
-|       |   +-- user.py             # User model (Argon2 password hashes)
-|       |   +-- claim.py            # Claim model
-|       |   +-- claim_submission.py # ClaimSubmission model (pending claims)
-|       |   +-- conversation.py     # Conversation model (JSONB messages)
-|       |   +-- conversation_message.py # ConversationMessage model (normalized)
-|       |   +-- policy_chunk.py     # PolicyChunk model
-|       |   +-- embedding_job.py    # EmbeddingJob model
-|       +-- schemas/                # Pydantic data schemas
-|           +-- __init__.py         # Schemas package init
-|           +-- models.py           # Request, response, and claim validation models
+|   |   +-- __init__.py             # Package init
+|   |   +-- config.py               # Pydantic Settings configuration loader
+|   |   +-- main.py                 # FastAPI application, CORS, lifespan hooks
+|   |   +-- database.py             # SQLAlchemy async engine & session factory
+|   |   +-- auth.py                 # JWT auth, Argon2 hashing, cookie management
+|   |   +-- middleware.py           # Request size limit middleware
+|   |   +-- rate_limiter.py         # SlowAPI rate limiting configuration
+|   |   +-- idempotency.py          # Request idempotency cache with TTL
+|   |   +-- agent/                  # Google ADK Agent definition
+|   |   |   +-- __init__.py         # Agent package init
+|   |   |   +-- agent.py            # LlmAgent initialization, session runner, event loop
+|   |   |   +-- registry.py         # Tool registry (ToolSpec/build_default_registry)
+|   |   |   +-- context.py          # Async context variables (current_user_id)
+|   |   |   +-- prompts.py          # System instructions & security injection defenses
+|   |   |   +-- conversation_store.py # Conversation persistence helpers
+|   |   |   +-- tools/              # Agent tools
+|   |   |       +-- __init__.py     # Tools package init
+|   |   |       +-- policy_rag.py   # query_policy tool (RAG search)
+|   |   |       +-- claim_status.py # get_claim_status tool (owner-scoped lookup)
+|   |   |       +-- search_claims.py # search_claims tool (natural language claims search)
+|   |   |       +-- submit_claim.py # prepare_claim_submission tool + submit_claim_internal
+|   |   +-- api/                    # REST API endpoints
+|   |   |   +-- __init__.py         # API package init
+|   |   |   +-- v1/
+|   |   |       +-- __init__.py     # API v1 package init
+|   |   |       +-- router.py       # API v1 route aggregator
+|   |   |       +-- chat.py         # POST /api/v1/chat + /chat/reset endpoints
+|   |   |       +-- chat_stream.py  # POST /api/v1/chat/stream (SSE)
+|   |   |       +-- health.py       # GET /api/v1/health check endpoint
+|   |   |       +-- auth.py         # POST /signup, /signin, /logout, /me
+|   |   |       +-- conversations.py # GET /chat/conversations, /chat/conversations/{id}
+|   |   |       +-- claims.py       # POST /claims/prepare, /claims/confirm
+|   |   |       +-- rag_eval.py     # POST /rag/evaluate, GET /rag/dataset
+|   |   +-- domain/                 # Domain adapters over ragkit (plan 06)
+|   |   |   +-- __init__.py         # Domain package init
+|   |   |   +-- embeddings.py       # EmbeddingFactory + vector store wiring
+|   |   |   +-- evaluation.py       # RAG evaluation CLI runner
+|   |   |   +-- claims/             # Claims domain bindings
+|   |   |   |   +-- __init__.py     # Claims package init
+|   |   |   |   +-- ingest.py       # Claim ingestion into the claims vector store
+|   |   |   |   +-- outbox.py       # Embedding-job outbox (SQLAlchemy store + processor)
+|   |   |   |   +-- retriever.py    # Claims hybrid retrieval (owner-scoped)
+|   |   |   |   +-- tools.py        # search_claims tool binding
+|   |   |   +-- policies/           # Policies domain bindings
+|   |   |       +-- __init__.py     # Policies package init
+|   |   |       +-- ingestion.py    # Policy versioning + ingestion pipeline
+|   |   |       +-- retriever.py    # Policy hybrid retrieval
+|   |   |       +-- tools.py        # query_policy tool binding
+|   |   +-- data/                   # Policy documents
+|   |   |   +-- sample_policy.md    # Source policy document for RAG
+|   |   +-- models/                 # SQLAlchemy ORM models
+|   |   |   +-- __init__.py         # Models package init
+|   |   |   +-- base.py             # Declarative base with common columns
+|   |   |   +-- user.py             # User model (Argon2 password hashes)
+|   |   |   +-- claim.py            # Claim model
+|   |   |   +-- claim_submission.py # ClaimSubmission model (pending claims)
+|   |   |   +-- conversation.py     # Conversation model (JSONB messages)
+|   |   |   +-- conversation_message.py # ConversationMessage model (normalized)
+|   |   |   +-- policy_chunk.py     # PolicyChunk model
+|   |   |   +-- policy_version.py   # PolicyVersion model (ingestion snapshots)
+|   |   |   +-- policy_ingestion_meta.py # Per-source ingestion metadata
+|   |   |   +-- embedding_job.py    # EmbeddingJob model
+|   |   +-- schemas/                # Pydantic data schemas
+|   |   |   +-- __init__.py         # Schemas package init
+|   |   |   +-- models.py           # Request, response, and claim validation models
+|   |   +-- workers/                # Background workers
+|   |       +-- embedding_drain.py  # Outbox drainer (FOR UPDATE SKIP LOCKED)
 |   +-- tests/
 |       +-- conftest.py             # Shared fixtures
 |       +-- test_health.py          # Health endpoint tests
@@ -545,6 +584,25 @@ omnicare-financial/
 |       +-- test_conversation_store.py # Conversation persistence tests
 |       +-- test_security_isolation.py # Cross-user isolation tests
 |       +-- test_llm_e2e.py         # End-to-end LLM integration tests
+|
++-- libs/                           # Installable shared libraries (uv workspace)
+|   +-- ragkit/                     # Domain-agnostic RAG toolkit
+|       +-- pyproject.toml          # ragkit package manifest (v0.1.0)
+|       +-- README.md               # ragkit documentation
+|       +-- src/ragkit/
+|       |   +-- chunking/           # Markdown-section & sliding-window chunkers
+|       |   +-- embeddings/         # Embedding function protocols + LiteLLM impl
+|       |   +-- evaluation/         # RAG evaluation harness (retrieval + answer metrics)
+|       |   +-- ingestion/          # Ingestion pipeline, sources, versioning, locking
+|       |   +-- jobs/               # Outbox job store, drainer, reclaim
+|       |   +-- stores/             # pgvector + in-memory vector stores
+|       |   +-- db/                 # Session factory helper
+|       |   +   config.py           # RagSettings protocol
+|       |   +   registry.py         # Provider registries (embeddings, stores)
+|       |   +   types.py            # Shared types (Chunk, RetrievalError, ...)
+|       |   +   validation.py       # Identifier/embedding validation
+|       +-- tests/                  # ragkit test suite (231 tests)
+|       +-- examples/               # Minimal ragkit usage example
 |
 +-- frontend/                       # React + Vite Web Application
     +-- Dockerfile                  # Multi-stage Node 20-alpine build

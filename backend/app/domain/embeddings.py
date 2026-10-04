@@ -17,6 +17,7 @@ from __future__ import annotations
 from app.config import get_settings
 from app.database import async_session_factory
 from ragkit.embeddings import (
+    EmbeddingFunction,
     LitellmEmbeddingFunction,
     get_embedding_dimension,
     register_dimension,
@@ -46,7 +47,7 @@ class EmbeddingFactory:
     """
 
     @classmethod
-    def get_embedding_function(cls):
+    def get_embedding_function(cls) -> EmbeddingFunction:
         """Create and return an embedding function.
 
         Delegates to the ragkit embedding registry, which selects the

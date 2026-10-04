@@ -2,6 +2,13 @@
 # ==============================================================================
 # OmniCare Financial Backend - Development Dockerfile
 # ==============================================================================
+# Build context: the REPOSITORY ROOT (see docker-compose.dev.yml),
+# not ./backend, so libs/ragkit is available. ragkit is installed
+# from the local source before the backend package; otherwise uv
+# resolves `ragkit>=0.1.0` from PyPI, where an unrelated package
+# of the same name exists (its dependency tree conflicts with the
+# backend's httpx>=0.28 requirement and breaks resolution).
+#
 # Differences from production Dockerfile:
 #   - Creates a virtual environment at /opt/venv for editable installs.
 #   - Uses `uv pip install -e .` for live code reloading during development.
@@ -24,25 +31,30 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Install UV package manager.
-RUN curl -LsSf https://astral.sh/uv/install.sh | sh
+# Install UV package manager (pinned version). Development uses
+# uv exclusively for dependency management. The versioned
+# installer URL pins both the installer script and the version.
+RUN curl -LsSf https://github.com/astral-sh/uv/releases/download/0.12.23/uv-installer.sh | sh
 ENV PATH="/root/.local/bin:$PATH"
 
 # Set working directory.
 WORKDIR /app
 
-# Copy dependency manifests for caching.
-COPY pyproject.toml ./
-
-# Create a virtual environment and install dependencies in editable mode.
-# The venv ensures consistent dependency resolution across development machines.
+# Install the local ragkit library first so the backend's
+# `ragkit>=0.1.0` dependency resolves from source, never PyPI.
+COPY libs/ragkit /tmp/ragkit
 RUN uv venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
+RUN uv pip install /tmp/ragkit
+
+# Copy dependency manifest for caching and install the backend in
+# editable mode. ragkit is already satisfied by the local install.
+COPY backend/pyproject.toml ./
 RUN uv pip install -e .
 
 # Copy backend application source code.
-COPY app/ ./app/
-COPY tests/ ./tests/
+COPY backend/app/ ./app/
+COPY backend/tests/ ./tests/
 
 # Create a non-root user to run the application
 RUN groupadd -r appuser && useradd -r -g appuser -d /app -s /sbin/nologin appuser \

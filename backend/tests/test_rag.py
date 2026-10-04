@@ -269,7 +269,7 @@ async def test_ingest_claim():
     ):
         mock_embed.return_value = AsyncMock(return_value=[[0.1] * 1536])
         await ingest_claim(
-            id=test_id,
+            claim_uuid=test_id,
             claim_id="CLM-1",
             owner_id=test_user_id,
             claim_type="Water",
@@ -307,7 +307,7 @@ async def test_ingest_all_claims():
             await ingest_all_claims()
             mock_ingest.assert_called_once()
             call_kwargs = mock_ingest.call_args[1]
-            assert call_kwargs["id"] == mock_claim.id
+            assert call_kwargs["claim_uuid"] == mock_claim.id
             assert call_kwargs["claim_id"] == mock_claim.claim_id
 
 

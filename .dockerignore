@@ -1,0 +1,48 @@
+# ==============================================================================
+# OmniCare Financial - Root Docker Ignore
+# ==============================================================================
+# Applied when the build context is the repository root (backend and
+# embedding-drain images). Keep the context small and never leak
+# secrets, VCS metadata, or unrelated build artifacts into images.
+#
+# The frontend image keeps its own context (./frontend) and its own
+# .dockerignore, so excluding frontend/ here does not affect it.
+# ==============================================================================
+
+# Version control metadata
+.git
+.gitignore
+
+# Secrets and environment files (never bake into images)
+.env
+.env.*
+
+# Frontend source and dependencies (built separately from ./frontend)
+frontend
+node_modules
+
+# Python bytecode and caches
+**/__pycache__
+**/*.py[cod]
+**/*.egg-info
+
+# Virtual environments
+**/.venv
+**/venv
+**/env
+
+# Test and coverage artifacts
+**/.pytest_cache
+**/.ruff_cache
+**/htmlcov
+**/.coverage
+**/.coverage.*
+
+# Project tooling state
+.kilo
+.pytest_cache
+.ruff_cache
+htmlcov
+
+# macOS system files
+.DS_Store
