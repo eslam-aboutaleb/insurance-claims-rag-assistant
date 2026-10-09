@@ -1,9 +1,9 @@
 """
-Tests for app.domain.policies.ingestion -- the adapter over ragkit.
+Tests for app.domain.policies.ingestion -- the adapter over ragit.
 
 The advisory lock and the ingestion logic moved to
-:class:`ragkit.ingestion.IngestionPipeline` (ragkit
-plan 04) and are tested in ``libs/ragkit/tests``
+:class:`ragit.ingestion.IngestionPipeline` (ragit
+plan 04) and are tested in ``libs/ragit/tests``
 (``test_ingestion_locking.py`` and
 ``test_ingestion_pipeline.py``). These tests verify
 the adapter wiring only: that ``ingest_policy`` builds
@@ -26,7 +26,7 @@ async def test_ingest_policy_runs_pipeline_with_advisory_lock_key():
 
     The advisory lock is acquired because ``lock_key`` is
     passed to ``pipeline.run``; the lock itself is
-    implemented and tested in ragkit.
+    implemented and tested in ragit.
     """
     policy_path = "/tmp/policy.md"
 

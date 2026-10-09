@@ -1,11 +1,11 @@
-"""Claims retrieval adapter over ragkit (ragkit plan 06).
+"""Claims retrieval adapter over ragit (ragit plan 06).
 
 The OmniCare claims binding — the ``claims`` table, its
 ``description`` column, and the metadata columns returned
 in claim metadata — lives here as
 :data:`CLAIMS_RETRIEVER_SPEC`. The generic hybrid
-retrieval machinery is ragkit's
-:class:`ragkit.retrieval.HybridRetriever`.
+retrieval machinery is ragit's
+:class:`ragit.retrieval.HybridRetriever`.
 
 The horizontal privilege-escalation guard lives here too:
 :class:`ClaimsRetriever` always passes
@@ -22,7 +22,7 @@ from typing import Any
 
 from app.config import get_settings
 from app.database import async_session_factory
-from ragkit.retrieval import HybridRetriever, RetrieverSpec, as_dicts
+from ragit.retrieval import HybridRetriever, RetrieverSpec, as_dicts
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +45,7 @@ CLAIMS_RETRIEVER_SPEC = RetrieverSpec(
 class ClaimsRetriever:
     """Hybrid retrieval over the OmniCare claims table.
 
-    Wraps ragkit's :class:`ragkit.retrieval.HybridRetriever`
+    Wraps ragit's :class:`ragit.retrieval.HybridRetriever`
     with the claims binding. Every retrieval is scoped to
     the requesting user: ``owner_id`` is passed as an
     equality filter on both search stages, so another

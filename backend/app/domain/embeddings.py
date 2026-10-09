@@ -1,11 +1,11 @@
-"""OmniCare embedding and vector-store wiring over ragkit (ragkit plan 07).
+"""OmniCare embedding and vector-store wiring over ragit (ragit plan 07).
 
 The embedding provider registry and the vector-store ABCs
-are domain-agnostic (ragkit); this module is the OmniCare
+are domain-agnostic (ragit); this module is the OmniCare
 wiring: it selects the provider from the application
 settings and injects the app's session factory, embedding
 function, and embedding dimension — the dependencies
-ragkit, being domain-agnostic, cannot import itself.
+ragit, being domain-agnostic, cannot import itself.
 
 This module replaces the deprecated ``app.rag.embedding``,
 ``app.rag.embedding_dimensions``, ``app.rag.vector_store``,
@@ -16,16 +16,16 @@ from __future__ import annotations
 
 from app.config import get_settings
 from app.database import async_session_factory
-from ragkit.embeddings import (
+from ragit.embeddings import (
     EmbeddingFunction,
     LitellmEmbeddingFunction,
     get_embedding_dimension,
     register_dimension,
 )
-from ragkit.embeddings.registry import (
+from ragit.embeddings.registry import (
     get_embedding_function as _get_embedding_function,
 )
-from ragkit.stores import VectorStore, get_vector_store as _ragkit_get_vector_store
+from ragit.stores import VectorStore, get_vector_store as _ragit_get_vector_store
 
 __all__ = [
     "EmbeddingFactory",
@@ -50,7 +50,7 @@ class EmbeddingFactory:
     def get_embedding_function(cls) -> EmbeddingFunction:
         """Create and return an embedding function.
 
-        Delegates to the ragkit embedding registry, which selects the
+        Delegates to the ragit embedding registry, which selects the
         provider from ``settings.embedding_provider`` (defaulting to
         the LiteLLM provider) and configures it with the API key and
         model name from the application settings.
@@ -79,7 +79,7 @@ def get_vector_store(
         Configured VectorStore instance based on provider setting.
     """
     settings = get_settings()
-    return _ragkit_get_vector_store(
+    return _ragit_get_vector_store(
         table_name=table_name,
         id_field=id_field,
         embedding_dim=(embedding_dim if embedding_dim is not None else get_embedding_dimension()),

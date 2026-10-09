@@ -1,20 +1,20 @@
-"""Claims embedding-job outbox adapter over ragkit (ragkit plans 06-07).
+"""Claims embedding-job outbox adapter over ragit (ragit plans 06-07).
 
 The claim embedding job is the OmniCare binding of
-ragkit's generic outbox: :class:`SqlAlchemyJobStore`
-implements ragkit's ``EmbeddingJobStore`` protocol
+ragit's generic outbox: :class:`SqlAlchemyJobStore`
+implements ragit's ``EmbeddingJobStore`` protocol
 against the ``EmbeddingJob`` model,
 :func:`enqueue_embedding_job` writes a pending job row
-through :func:`ragkit.jobs.enqueue_job` — in the
+through :func:`ragit.jobs.enqueue_job` — in the
 caller's transaction when a session is supplied, so the
 claim row and its job row commit together —
-:class:`ClaimJobProcessor` is the ragkit
+:class:`ClaimJobProcessor` is the ragit
 ``JobProcessor`` that embeds a claim and upserts its
 entry into the claims vector store (the ``claims``
 binding lives in :mod:`app.domain.claims.retriever`),
 and :func:`process_pending_jobs` /
 :func:`reclaim_stale_jobs` wire the store and processor
-into ragkit's generic job functions.
+into ragit's generic job functions.
 
 This module replaces the deprecated
 ``app.rag.embedding_jobs`` shim (removed in plan 07).
@@ -49,10 +49,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import async_session_factory
 from app.domain.claims.retriever import CLAIMS_RETRIEVER_SPEC
-from ragkit.jobs import JobPayload, claim_jobs, enqueue_job
-from ragkit.jobs import (
-    process_pending_jobs as _ragkit_process_pending_jobs,
-    reclaim_stale_jobs as _ragkit_reclaim_stale_jobs,
+from ragit.jobs import JobPayload, claim_jobs, enqueue_job
+from ragit.jobs import (
+    process_pending_jobs as _ragit_process_pending_jobs,
+    reclaim_stale_jobs as _ragit_reclaim_stale_jobs,
 )
 
 logger = logging.getLogger(__name__)
@@ -86,7 +86,7 @@ def _payload_from_row(row: Any) -> JobPayload:
 
 
 class SqlAlchemyJobStore:
-    """ragkit ``EmbeddingJobStore`` implemented against ``embedding_jobs``."""
+    """ragit ``EmbeddingJobStore`` implemented against ``embedding_jobs``."""
 
     def __init__(self, session_factory: Any = None) -> None:
         self._session_factory = session_factory or async_session_factory
@@ -263,7 +263,7 @@ class SqlAlchemyJobStore:
 
 
 class ClaimJobProcessor:
-    """ragkit ``JobProcessor`` that embeds a claim and upserts its index entry."""
+    """ragit ``JobProcessor`` that embeds a claim and upserts its index entry."""
 
     async def process(self, job: JobPayload) -> None:
         """Embed the claim text and upsert it into the claims vector store."""
@@ -272,8 +272,8 @@ class ClaimJobProcessor:
         from app.config import get_settings  # noqa: PLC0415
         from app.domain.embeddings import EmbeddingFactory, get_vector_store  # noqa: PLC0415
         from app.models.claim import Claim  # noqa: PLC0415
-        from ragkit.embeddings import get_embedding_dimension  # noqa: PLC0415
-        from ragkit.validation import validate_embedding  # noqa: PLC0415
+        from ragit.embeddings import get_embedding_dimension  # noqa: PLC0415
+        from ragit.validation import validate_embedding  # noqa: PLC0415
 
         payload = job.payload
         claim_id = payload["claim_id"]
@@ -330,11 +330,11 @@ async def enqueue_embedding_job(  # noqa: PLR0913, PLR0917
 ) -> None:
     """Add an embedding job for a newly submitted claim.
 
-    Delegates to ragkit's :func:`ragkit.jobs.enqueue_job`
+    Delegates to ragit's :func:`ragit.jobs.enqueue_job`
     with the caller's session: when ``session`` is supplied,
     the job row is only added and flushed, so the claim and
     its embedding job are persisted atomically by the
-    caller's commit. When ``session`` is None, ragkit opens
+    caller's commit. When ``session`` is None, ragit opens
     and commits its own transaction.
 
     Args:
@@ -421,7 +421,7 @@ async def process_pending_jobs(limit: int = 10, worker_id: str | None = None) ->
 
     store = SqlAlchemyJobStore()
     processor = ClaimJobProcessor()
-    return await _ragkit_process_pending_jobs(
+    return await _ragit_process_pending_jobs(
         store,
         processor,
         limit=limit,
@@ -453,7 +453,7 @@ async def reclaim_stale_jobs(stale_after_seconds: float | None = None) -> int:
         stale_after_seconds = settings.job_stale_after_seconds
 
     store = SqlAlchemyJobStore()
-    return await _ragkit_reclaim_stale_jobs(
+    return await _ragit_reclaim_stale_jobs(
         store,
         stale_after_seconds=stale_after_seconds,
     )

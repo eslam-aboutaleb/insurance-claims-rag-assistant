@@ -1,10 +1,12 @@
-# uv workspace root (ragkit plan 07).
+# uv workspace root (ragit plan 07).
 #
-# The workspace makes ``backend`` resolve ``ragkit`` from
-# ``libs/ragkit`` (an installable workspace member) instead
-# of PyPI. The frontend keeps its own tooling
-# (package.json); this file only declares the Python
-# workspace.
+# The workspace makes ``backend`` resolve its
+# dependencies as a single project. The generic RAG
+# machinery now comes from the published ``ragit``
+# package (pinned git dependency, see
+# backend/pyproject.toml). The frontend keeps its own
+# tooling (package.json); this file only declares the
+# Python workspace.
 
 [tool.uv.workspace]
-members = ["backend", "libs/ragkit"]
+members = ["backend"]

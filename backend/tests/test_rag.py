@@ -19,7 +19,7 @@ from app.domain.policies.ingestion import (
     ingest_policy,
 )
 from app.domain.policies.retriever import retrieve_hybrid
-from ragkit.types import SearchResult
+from ragit.types import SearchResult
 
 
 def test_chunk_policy_document(tmp_path):
@@ -113,7 +113,7 @@ async def test_embedding_function_embed_documents():
 
 @pytest.mark.asyncio
 async def test_ingest_policy_success(tmp_path):
-    """ingest_policy() wires the ragkit pipeline to the policy tables."""
+    """ingest_policy() wires the ragit pipeline to the policy tables."""
     md_file = tmp_path / "policy.md"
     md_file.write_text("# Policy\n\nContent.", encoding="utf-8")
 
@@ -232,8 +232,8 @@ async def test_claims_rag_hybrid():
     ]
 
     with (
-        patch("ragkit.retrieval.retriever.get_vector_store", return_value=mock_store),
-        patch("ragkit.retrieval.retriever.get_embedding_function") as mock_embed,
+        patch("ragit.retrieval.retriever.get_vector_store", return_value=mock_store),
+        patch("ragit.retrieval.retriever.get_embedding_function") as mock_embed,
     ):
         mock_embed.return_value = AsyncMock(return_value=[[0.1] * 1536])
         results = await retrieve_claims_hybrid("kitchen pipe", test_user_id)
@@ -246,12 +246,12 @@ async def test_claims_rag_hybrid():
 async def test_claims_rag_exception_handling():
     test_user_id = uuid.uuid4()
 
-    with patch("ragkit.retrieval.retriever.get_vector_store") as mock_factory:
+    with patch("ragit.retrieval.retriever.get_vector_store") as mock_factory:
         mock_store = AsyncMock()
         mock_factory.return_value = mock_store
         mock_store.hybrid_search.side_effect = Exception("DB error")
 
-        with patch("ragkit.retrieval.retriever.get_embedding_function") as mock_embed:
+        with patch("ragit.retrieval.retriever.get_embedding_function") as mock_embed:
             mock_embed.return_value = AsyncMock(return_value=[[0.1] * 1536])
             error_results = await retrieve_claims_hybrid("kitchen", test_user_id)
             assert error_results == []

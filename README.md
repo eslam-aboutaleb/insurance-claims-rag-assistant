@@ -231,23 +231,27 @@ Powered by **Google Agent Development Kit (ADK)** and **LiteLLM**, the assistant
 | **Google ADK** _(Agent Development Kit)_ | **Enterprise Agent Framework** -- Standardized, resilient agent orchestration engine providing native session tracking, tool execution loops, and guardrails. | _ **Native Tool Orchestration**: Converts standard Python functions directly into model-consumable tool definitions.<br>_ **Multi-Turn Session State**: First-class `InMemorySessionService` cleanly isolates user conversations with FIFO eviction (max 500 sessions).<br>_ **Model Agnostic**: Seamlessly interfaces with third-party providers via LiteLLM.<br>_ **Clean Pattern**: Separates system instructions, tool definitions, and runtime execution. |
 | **LiteLLM**                              | **Universal LLM Proxy & Router** -- Decouples the core agent code from vendor-specific LLM APIs.                                                              | _ **100+ Provider Support**: Switch effortlessly between OpenAI, Anthropic, Google Gemini, Azure, and open-source models.<br>_ **Zero Code Changes**: Change the model with a single environment variable (`LLM_MODEL`).<br>\* **Standardized Input/Output**: Normalizes API schemas, cost tracking, and error handling across providers.                                                                                |
 | **pgvector**                          | **PostgreSQL Vector Extension** -- Native pgvector extension inside PostgreSQL for hybrid vector + PostgreSQL full-text search with Reciprocal Rank Fusion. | _ **Unified Storage**: Embeddings and keyword search live in the same Postgres instance as claims and conversations.<br>_ **Hybrid Search**: Combines vector similarity (HNSW) with PostgreSQL full-text search (tsvector/tsquery) using RRF for robust retrieval.<br>_ **No External Service**: Eliminates the need for a separate vector database process or Docker volume.                                                                                   |
-| **ragkit** _(libs/ragkit)_           | **Domain-Agnostic RAG Toolkit** -- Installable library (uv workspace member) carrying every generic RAG primitive: chunking, embeddings, vector stores, ingestion, evaluation, and the job outbox. | _ **Clean Separation**: OmniCare-specific bindings live in `backend/app/domain/`; generic machinery lives in `ragkit`.<br>_ **Library Isolation**: ragkit never imports `app.*` (enforced by `tests/test_no_app_imports.py`).<br>_ **Reusable**: Any FastAPI/SQLAlchemy service can adopt it; see `libs/ragkit/README.md`. |
+| **ragit** _(GitHub)_           | **Domain-Agnostic RAG Toolkit** -- Published package (pinned git dependency, `ragit[pgvector] @ v0.2.0`) carrying every generic RAG primitive: chunking, embeddings, vector stores, ingestion, evaluation, and the job outbox. | _ **Clean Separation**: OmniCare-specific bindings live in `backend/app/domain/`; generic machinery lives in `ragit`.<br>_ **Library Isolation**: ragit never imports `app.*`.<br>_ **Reusable**: Any FastAPI/SQLAlchemy service can adopt it; see [github.com/eslam-aboutaleb/ragkit](https://github.com/eslam-aboutaleb/ragkit). |
 
-### The ragkit Library (`libs/ragkit`)
+### The ragit Library
 
-The RAG subsystem is extracted into an installable, domain-agnostic library so the retrieval machinery can be reused (and tested) independently of OmniCare's schema. The repository is a [uv workspace](https://docs.astral.sh/uv/concepts/workspaces/): the root `pyproject.toml` declares `backend` and `libs/ragkit` as members, so `backend` resolves `ragkit` from the local source tree.
+The RAG subsystem is extracted into an installable, domain-agnostic library so the retrieval machinery can be reused (and tested) independently of OmniCare's schema. `ragit` is published from [github.com/eslam-aboutaleb/ragkit](https://github.com/eslam-aboutaleb/ragkit) (the GitHub repo is named `ragkit`; the Python package inside is `ragit`). The backend pins it as a git dependency with the `pgvector` extra in `backend/pyproject.toml`:
 
-| ragkit module            | Responsibility                                                                                              |
+```
+"ragit[pgvector] @ git+https://github.com/eslam-aboutaleb/ragkit.git@v0.2.0",
+```
+
+| ragit module           | Responsibility                                                                                              |
 | :----------------------- | :---------------------------------------------------------------------------------------------------------- |
-| `ragkit.chunking`        | `MarkdownSectionChunker`, `SlidingWindowChunker`, and the chunker registry                                  |
-| `ragkit.embeddings`      | `EmbeddingFunction` protocol, LiteLLM implementation, dimension validation, provider registry               |
-| `ragkit.stores`          | `PgVectorStore` (hybrid vector + PostgreSQL full-text search with RRF) and an in-memory store               |
-| `ragkit.ingestion`       | `IngestionPipeline` (hash/compare/retire/chunk/embed/upsert), document sources, snapshot versioning, locking |
-| `ragkit.jobs`            | Outbox `EmbeddingJobStore` protocol, `process_pending_jobs`, `reclaim_stale_jobs`, drainer CLI              |
-| `ragkit.evaluation`      | RAG evaluation harness: retrieval metrics (precision/recall@k, MRR) and LLM-judged answer metrics           |
-| `ragkit.validation`      | SQL identifier allowlist and embedding dimension checks                                                     |
+| `ragit.chunking`        | `MarkdownSectionChunker`, `SlidingWindowChunker`, and the chunker registry                                  |
+| `ragit.embeddings`      | `EmbeddingFunction` protocol, LiteLLM implementation, dimension validation, provider registry               |
+| `ragit.stores`          | `PgVectorStore` (hybrid vector + PostgreSQL full-text search with RRF) and an in-memory store               |
+| `ragit.ingestion`       | `IngestionPipeline` (hash/compare/retire/chunk/embed/upsert), document sources, snapshot versioning, locking |
+| `ragit.jobs`            | Outbox `EmbeddingJobStore` protocol, `process_pending_jobs`, `reclaim_stale_jobs`, drainer CLI              |
+| `ragit.evaluation`      | RAG evaluation harness: retrieval metrics (precision/recall@k, MRR) and LLM-judged answer metrics           |
+| `ragit.validation`      | SQL identifier allowlist and embedding dimension checks                                                     |
 
-**Domain adapters** (`backend/app/domain/`) bind ragkit to OmniCare's tables: `domain/policies/` owns policy versioning and ingestion, `domain/claims/` owns claim ingestion, the embedding-job outbox, and owner-scoped claim retrieval, and `domain/embeddings.py` wires the embedding function and vector store. The claims adapter always passes `owner_id` as a retrieval filter, so cross-user data leakage is structurally impossible.
+**Domain adapters** (`backend/app/domain/`) bind ragit to OmniCare's tables: `domain/policies/` owns policy versioning and ingestion, `domain/claims/` owns claim ingestion, the embedding-job outbox, and owner-scoped claim retrieval, and `domain/embeddings.py` wires the embedding function and vector store. The claims adapter always passes `owner_id` as a retrieval filter, so cross-user data leakage is structurally impossible.
 
 **Embedding drain worker** (`embedding-drain` service): claim embeddings never block claim submission. `POST /api/v1/claims/confirm` writes the claim and its `embedding_jobs` row in the same transaction (outbox pattern); the drainer worker claims pending jobs with `FOR UPDATE SKIP LOCKED`, generates the embedding, and upserts it into pgvector. Multiple drainer replicas scale without coordination, and jobs stuck in `processing` past `JOB_STALE_AFTER_SECONDS` are reclaimed automatically.
 
@@ -421,19 +425,15 @@ Configure these settings in `.env` (or pass via container environment):
 
 ## Running Tests
 
-OmniCare Financial includes automated tests with Pytest covering authentication, RAG ingestion, vector retrieval, agent tool execution, idempotency, and API endpoints. The backend suite (410 tests) runs against a dedicated test database (`OMNICARE_TEST_DATABASE_URL`); the ragkit suite (231 tests) runs inside `libs/ragkit`. Together they exercise core paths and corner cases (empty inputs, invalid parameters, locking, stale-job reclaim, versioning, and cross-user isolation).
+OmniCare Financial includes automated tests with Pytest covering authentication, RAG ingestion, vector retrieval, agent tool execution, idempotency, and API endpoints. The backend suite (410 tests) runs against a dedicated test database (`OMNICARE_TEST_DATABASE_URL`) and exercises core paths and corner cases (empty inputs, invalid parameters, locking, stale-job reclaim, versioning, and cross-user isolation). The generic RAG machinery is covered by the ragit package's own test suite, published from [github.com/eslam-aboutaleb/ragkit](https://github.com/eslam-aboutaleb/ragkit).
 
 ### Run Tests Locally
 
 ```bash
-# Backend tests (from the repository root; the uv workspace
-# resolves ragkit from libs/ragkit)
+# Backend tests (from the repository root; the backend
+# resolves ragit from the pinned git dependency)
 cd backend
 uv pip install -e .
-python -m pytest tests/ -v
-
-# ragkit library tests
-cd libs/ragkit
 python -m pytest tests/ -v
 ```
 
@@ -469,8 +469,6 @@ docker-compose exec backend pytest tests/ -v
 | `tests/test_security_isolation.py` | Cross-user data isolation, horizontal privilege escalation |
 | `tests/test_llm_e2e.py` | End-to-end LLM integration tests |
 
-**ragkit test suite** (`libs/ragkit/tests/`): chunking semantics, pgvector hybrid search (including owner-filter binding and reserved-parameter collision guards), ingestion pipeline, snapshot versioning, advisory locking, job reclaim, evaluation metrics, and the library-isolation invariant (`test_no_app_imports.py`).
-
 ---
 
 ## Project Structure
@@ -483,7 +481,7 @@ omnicare-financial/
 +-- .pre-commit-config.yaml         # Pre-commit hooks (ruff, prettier)
 +-- docker-compose.yml              # Multi-container orchestration & networking
 +-- docker-compose.dev.yml          # Development overrides
-+-- pyproject.toml                  # uv workspace root (backend + libs/ragkit)
++-- pyproject.toml                  # uv workspace root (backend)
 +-- README.md                       # Comprehensive project documentation
 +-- sonar-project.properties        # SonarQube configuration
 +-- Makefile                        # Baseline harness targets (Tier A/B/C)
@@ -535,7 +533,7 @@ omnicare-financial/
 |   |   |       +-- conversations.py # GET /chat/conversations, /chat/conversations/{id}
 |   |   |       +-- claims.py       # POST /claims/prepare, /claims/confirm
 |   |   |       +-- rag_eval.py     # POST /rag/evaluate, GET /rag/dataset
-|   |   +-- domain/                 # Domain adapters over ragkit (plan 06)
+|   |   +-- domain/                 # Domain adapters over ragit (plan 06)
 |   |   |   +-- __init__.py         # Domain package init
 |   |   |   +-- embeddings.py       # EmbeddingFactory + vector store wiring
 |   |   |   +-- evaluation.py       # RAG evaluation CLI runner
@@ -584,25 +582,6 @@ omnicare-financial/
 |       +-- test_conversation_store.py # Conversation persistence tests
 |       +-- test_security_isolation.py # Cross-user isolation tests
 |       +-- test_llm_e2e.py         # End-to-end LLM integration tests
-|
-+-- libs/                           # Installable shared libraries (uv workspace)
-|   +-- ragkit/                     # Domain-agnostic RAG toolkit
-|       +-- pyproject.toml          # ragkit package manifest (v0.1.0)
-|       +-- README.md               # ragkit documentation
-|       +-- src/ragkit/
-|       |   +-- chunking/           # Markdown-section & sliding-window chunkers
-|       |   +-- embeddings/         # Embedding function protocols + LiteLLM impl
-|       |   +-- evaluation/         # RAG evaluation harness (retrieval + answer metrics)
-|       |   +-- ingestion/          # Ingestion pipeline, sources, versioning, locking
-|       |   +-- jobs/               # Outbox job store, drainer, reclaim
-|       |   +-- stores/             # pgvector + in-memory vector stores
-|       |   +-- db/                 # Session factory helper
-|       |   +   config.py           # RagSettings protocol
-|       |   +   registry.py         # Provider registries (embeddings, stores)
-|       |   +   types.py            # Shared types (Chunk, RetrievalError, ...)
-|       |   +   validation.py       # Identifier/embedding validation
-|       +-- tests/                  # ragkit test suite (231 tests)
-|       +-- examples/               # Minimal ragkit usage example
 |
 +-- frontend/                       # React + Vite Web Application
     +-- Dockerfile                  # Multi-stage Node 20-alpine build

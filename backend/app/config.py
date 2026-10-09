@@ -63,7 +63,7 @@ class Settings(BaseSettings):
     embedding_provider: str = Field(
         default="litellm",
         description=(
-            "Embedding provider selected through the ragkit embedding "
+            "Embedding provider selected through the ragit embedding "
             "registry; 'litellm' is the historical behavior."
         ),
     )

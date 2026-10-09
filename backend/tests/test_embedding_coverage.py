@@ -1,8 +1,8 @@
 """Coverage tests for the app.domain.embeddings adapter.
 
-The implementation lives in :mod:`ragkit.embeddings` (ragkit
+The implementation lives in :mod:`ragit.embeddings` (ragit
 plan 02); these tests pin the shim's compatibility surface:
-the factory delegates to the ragkit provider registry and the
+the factory delegates to the ragit provider registry and the
 LiteLLM function class is re-exported unchanged.
 """
 
@@ -29,7 +29,7 @@ class TestEmbedding:
             func = EmbeddingFactory.get_embedding_function()
             assert func.model_name == "custom-model"
 
-    def test_factory_returns_the_ragkit_litellm_function(self):
+    def test_factory_returns_the_ragit_litellm_function(self):
         from app.domain.embeddings import EmbeddingFactory, LitellmEmbeddingFunction
 
         func = EmbeddingFactory.get_embedding_function()
@@ -39,7 +39,7 @@ class TestEmbedding:
     def test_litellm_embedding_function_is_reexported(self):
         from app.domain.embeddings import LitellmEmbeddingFunction
 
-        from ragkit.embeddings.litellm import (
+        from ragit.embeddings.litellm import (
             LitellmEmbeddingFunction as RagkitFunction,
         )
 

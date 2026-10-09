@@ -12,8 +12,8 @@ when the pipeline actually ran end to end:
 2. The advisory-lock release ran in a ``finally`` without a preceding rollback. A failed
    statement left the session in an aborted transaction, so ``pg_advisory_unlock`` raised
    ``InFailedSQLTransactionError`` and replaced the real ingestion error with one about
-   the lock. The rollback-before-unlock now lives in ragkit's ``advisory_lock`` context
-   manager (tested in ``libs/ragkit/tests/test_ingestion_locking.py``); the adapter test
+   the lock. The rollback-before-unlock now lives in ragit's ``advisory_lock`` context
+   manager (tested in ``libs/ragit/tests/test_ingestion_locking.py``); the adapter test
    below verifies the originating error still reaches the caller.
 
 3. ``policy_id`` and ``policy_version_id`` were attached to the chunk dict at the top
@@ -135,8 +135,8 @@ async def test_ingest_surfaces_the_real_error_not_the_lock_cleanup() -> None:
 
     Regression test for the missing rollback before ``pg_advisory_unlock``.
 
-    The rollback-before-unlock now lives in ragkit's ``advisory_lock``
-    context manager (tested in ``libs/ragkit/tests/test_ingestion_locking.py``),
+    The rollback-before-unlock now lives in ragit's ``advisory_lock``
+    context manager (tested in ``libs/ragit/tests/test_ingestion_locking.py``),
     so a failed statement on the pipeline's owned session is rolled back before
     the lock is released. This test verifies the adapter propagates the
     pipeline's original error to the caller unchanged, instead of replacing it

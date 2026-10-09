@@ -3,11 +3,10 @@
 # OmniCare Financial Backend - Development Dockerfile
 # ==============================================================================
 # Build context: the REPOSITORY ROOT (see docker-compose.dev.yml),
-# not ./backend, so libs/ragkit is available. ragkit is installed
-# from the local source before the backend package; otherwise uv
-# resolves `ragkit>=0.1.0` from PyPI, where an unrelated package
-# of the same name exists (its dependency tree conflicts with the
-# backend's httpx>=0.28 requirement and breaks resolution).
+# not ./backend. The generic RAG machinery comes from the
+# published ``ragit`` package, pinned as a git dependency
+# in backend/pyproject.toml; uv clones it from GitHub
+# during the backend install (git is installed below).
 #
 # Differences from production Dockerfile:
 #   - Creates a virtual environment at /opt/venv for editable installs.
@@ -25,10 +24,12 @@ FROM python:3.11-slim
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1
 
-# Install system dependencies required for building Python packages.
+# Install system dependencies required for building Python packages
+# (git is required by uv to clone the pinned ragit git dependency).
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     curl \
+    git \
     && rm -rf /var/lib/apt/lists/*
 
 # Install UV package manager (pinned version). Development uses
@@ -40,15 +41,14 @@ ENV PATH="/root/.local/bin:$PATH"
 # Set working directory.
 WORKDIR /app
 
-# Install the local ragkit library first so the backend's
-# `ragkit>=0.1.0` dependency resolves from source, never PyPI.
-COPY libs/ragkit /tmp/ragkit
+# Create the virtual environment and install the backend
+# package in editable mode. The pinned ragit git dependency
+# is cloned from GitHub as part of this install.
 RUN uv venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
-RUN uv pip install /tmp/ragkit
 
 # Copy dependency manifest for caching and install the backend in
-# editable mode. ragkit is already satisfied by the local install.
+# editable mode.
 COPY backend/pyproject.toml ./
 RUN uv pip install -e .
 

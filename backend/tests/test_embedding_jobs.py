@@ -1,9 +1,9 @@
 """
-Tests for the OmniCare embedding-job adapter over ragkit's
-outbox (ragkit plan 05).
+Tests for the OmniCare embedding-job adapter over ragit's
+outbox (ragit plan 05).
 
 The retry/backoff/dead-letter engine itself is tested in
-``libs/ragkit/tests`` against in-memory doubles; these tests
+``libs/ragit/tests`` against in-memory doubles; these tests
 pin the OmniCare adapter: the ``SqlAlchemyJobStore`` mapping
 (claim query, guarded processing transition, completion and
 failure updates) and the ``ClaimJobProcessor`` (claim amount

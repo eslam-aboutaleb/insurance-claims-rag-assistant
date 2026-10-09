@@ -1,6 +1,6 @@
 """Coverage tests for app.domain.policies.tools uncovered paths.
 
-Moved from tests/test_policy_rag_coverage.py (ragkit plan 06).
+Moved from tests/test_policy_rag_coverage.py (ragit plan 06).
 """
 
 from __future__ import annotations

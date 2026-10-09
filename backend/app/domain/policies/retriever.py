@@ -1,10 +1,10 @@
-"""Policy retrieval adapter over ragkit (ragkit plan 06).
+"""Policy retrieval adapter over ragit (ragit plan 06).
 
 The OmniCare policy chunk binding — the ``policy_chunks``
 table, its ``text`` column, and the metadata columns returned
 in chunk metadata — lives here as :data:`POLICY_RETRIEVER_SPEC`.
-The generic hybrid retrieval machinery is ragkit's
-:class:`ragkit.retrieval.HybridRetriever`.
+The generic hybrid retrieval machinery is ragit's
+:class:`ragit.retrieval.HybridRetriever`.
 """
 
 from __future__ import annotations
@@ -14,7 +14,7 @@ from typing import Any
 
 from app.config import get_settings
 from app.database import async_session_factory
-from ragkit.retrieval import HybridRetriever, RetrieverSpec, as_dicts
+from ragit.retrieval import HybridRetriever, RetrieverSpec, as_dicts
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +30,7 @@ POLICY_RETRIEVER_SPEC = RetrieverSpec(
 class PolicyRetriever:
     """Hybrid retrieval over the OmniCare policy chunk table.
 
-    Wraps ragkit's :class:`ragkit.retrieval.HybridRetriever`
+    Wraps ragit's :class:`ragit.retrieval.HybridRetriever`
     with the policy chunk binding and exposes the historical
     ``retrieve_hybrid`` signature so callers keep working
     unchanged.

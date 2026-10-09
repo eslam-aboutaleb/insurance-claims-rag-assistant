@@ -1,4 +1,4 @@
-"""Claims ingestion adapter over ragkit (ragkit plan 06).
+"""Claims ingestion adapter over ragit (ragit plan 06).
 
 Claim ingestion writes directly into the ``claims``
 vector store (the binding lives in
@@ -21,8 +21,8 @@ from app.database import async_session_factory
 from app.domain.claims.retriever import CLAIMS_RETRIEVER_SPEC
 from app.models.claim import Claim
 from app.domain.embeddings import EmbeddingFactory, get_vector_store
-from ragkit.embeddings import get_embedding_dimension
-from ragkit.validation import validate_embedding
+from ragit.embeddings import get_embedding_dimension
+from ragit.validation import validate_embedding
 
 logger = logging.getLogger(__name__)
 

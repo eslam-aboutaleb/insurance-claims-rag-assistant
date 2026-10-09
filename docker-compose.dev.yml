@@ -50,8 +50,8 @@ services:
   # Source code is mounted as a volume so changes take effect immediately.
   backend:
     build:
-      # Build from the repository root so the Dockerfile can copy
-      # libs/ragkit (the backend depends on the local ragkit library).
+      # Build from the repository root (the Dockerfile
+      # copies backend/pyproject.toml and backend sources).
       context: .
       dockerfile: backend/Dockerfile.dev
     container_name: omnicare-backend-dev

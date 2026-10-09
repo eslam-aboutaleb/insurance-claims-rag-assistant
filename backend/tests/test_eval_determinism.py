@@ -1,7 +1,7 @@
 """
-Eval determinism test (ragkit plan 05, validation 7).
+Eval determinism test (ragit plan 05, validation 7).
 
-``run_evaluation`` moved to ragkit with its retrieval
+``run_evaluation`` moved to ragit with its retrieval
 function and dataset injected. This test drives the
 moved runner with a stubbed retrieval function and the
 application's curated dataset, and snapshots the
@@ -21,7 +21,7 @@ from app.domain.evaluation import (
     QuestionCategory,
     get_eval_dataset,
 )
-from ragkit.evaluation.runner import (
+from ragit.evaluation.runner import (
     EvalConfig,
     run_evaluation,
 )

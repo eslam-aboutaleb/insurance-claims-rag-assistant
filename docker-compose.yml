@@ -61,8 +61,8 @@ services:
   # and PostgreSQL persistence. Policy ingestion runs automatically on startup.
   backend:
     build:
-      # Build from the repository root so the Dockerfile can copy
-      # libs/ragkit (the backend depends on the local ragkit library).
+      # Build from the repository root (the Dockerfile
+      # copies backend/pyproject.toml and backend sources).
       context: .
       dockerfile: backend/Dockerfile
     container_name: omnicare-backend
@@ -97,7 +97,7 @@ services:
   # SKIP LOCKED, so additional replicas scale without coordination.
   embedding-drain:
     build:
-      # Same root context as the backend: the drainer imports ragkit.
+      # Same root context as the backend: the drainer imports ragit.
       context: .
       dockerfile: backend/Dockerfile
     container_name: omnicare-embedding-drain

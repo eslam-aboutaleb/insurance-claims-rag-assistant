@@ -1,4 +1,4 @@
-"""Tool registry for the OmniCare agent (ragkit plan 07).
+"""Tool registry for the OmniCare agent (ragit plan 07).
 
 The registry is the single place the agent's toolset is
 declared: adding a tool is one ``register`` call, with no

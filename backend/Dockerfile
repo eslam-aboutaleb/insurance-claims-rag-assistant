@@ -3,13 +3,11 @@
 # OmniCare Financial Backend - Production Dockerfile
 # ==============================================================================
 # Build context: the REPOSITORY ROOT (see docker-compose.yml), not ./backend.
-# The context must include libs/ragkit because the backend depends on the
-# local ragkit workspace member. Installing ragkit from the local source
-# before the backend package is essential: a bare `uv pip install .` would
-# resolve `ragkit>=0.1.0` from PyPI, where an unrelated package of the same
-# name exists. That package's dependency tree (ingest4llm -> httpx<0.28)
-# conflicts with the backend's httpx>=0.28 requirement and makes the build
-# fail with "No solution found when resolving dependencies".
+# The generic RAG machinery comes from the published ``ragit``
+# package, pinned as a git dependency in backend/pyproject.toml
+# (ragit[pgvector] @ github.com/eslam-aboutaleb/ragkit@v0.2.0).
+# uv needs git to clone that dependency, so git is installed
+# below alongside the build toolchain.
 # ==============================================================================
 
 FROM python:3.11-slim
@@ -20,10 +18,12 @@ ENV PYTHONUNBUFFERED=1 \
     UV_NO_CACHE=1 \
     UV_PYTHON_PREFER_SYSTEM=1
 
-# Install system dependencies
+# Install system dependencies (git is required by uv to
+# clone the pinned ragit git dependency)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     curl \
+    git \
     && rm -rf /var/lib/apt/lists/*
 
 # Install UV package manager (pinned version; the image uses
@@ -35,14 +35,9 @@ ENV PATH="/root/.local/bin:$PATH"
 
 WORKDIR /app
 
-# Install the local ragkit library FIRST so the backend's
-# `ragkit>=0.1.0` dependency is satisfied from source. uv keeps the
-# already-installed ragkit when it later resolves the backend package.
-COPY libs/ragkit /tmp/ragkit
-RUN uv pip install --system /tmp/ragkit
-
 # Copy dependency manifest and install the backend package.
-# ragkit is already satisfied, so uv does not touch the index for it.
+# The pinned ragit git dependency is resolved from GitHub
+# as part of this install.
 COPY backend/pyproject.toml ./
 RUN uv pip install --system .
 # Ensure pip is entirely removed

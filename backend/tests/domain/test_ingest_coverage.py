@@ -1,9 +1,9 @@
 """Coverage tests for app.domain.policies.ingestion uncovered paths.
 
-The chunking tests moved to ``libs/ragkit/tests/test_chunking.py``
-together with the chunking implementation (ragkit plan 02); the
+The chunking tests moved to ``libs/ragit/tests/test_chunking.py``
+together with the chunking implementation (ragit plan 02); the
 ingestion-path tests below point at the domain adapter
-(ragkit plan 06).
+(ragit plan 06).
 """
 
 from __future__ import annotations

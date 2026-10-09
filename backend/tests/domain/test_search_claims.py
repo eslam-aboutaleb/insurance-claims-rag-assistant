@@ -1,7 +1,7 @@
 """
 Tests for app.domain.claims.tools module.
 
-Moved from tests/test_search_claims.py (ragkit plan 06):
+Moved from tests/test_search_claims.py (ragit plan 06):
 the tool moved to the domain adapter, so the patches
 target ``app.domain.claims.tools``. The ``current_user_id``
 ContextVar is resolved at call time inside the tool, so

@@ -1,4 +1,4 @@
-"""Owner-scoping tests for the claims retrieval adapter (ragkit plan 06 T4a).
+"""Owner-scoping tests for the claims retrieval adapter (ragit plan 06 T4a).
 
 The horizontal privilege-escalation guard: ``ClaimsRetriever``
 always passes ``owner_id=str(user_id)`` as an equality filter

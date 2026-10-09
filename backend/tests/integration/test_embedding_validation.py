@@ -12,7 +12,7 @@ from typing import Any
 
 import pytest
 
-from ragkit.validation import validate_embedding as _validate_embedding
+from ragit.validation import validate_embedding as _validate_embedding
 from app.domain.embeddings import get_vector_store
 
 

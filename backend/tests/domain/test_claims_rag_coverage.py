@@ -1,8 +1,8 @@
 """Coverage tests for app.domain.claims.retriever uncovered paths.
 
-Moved from tests/test_claims_rag_coverage.py (ragkit plan 06):
+Moved from tests/test_claims_rag_coverage.py (ragit plan 06):
 the binding moved to the domain adapter, so the patch targets
-the ragkit ``HybridRetriever`` the adapter wraps.
+the ragit ``HybridRetriever`` the adapter wraps.
 """
 
 from __future__ import annotations

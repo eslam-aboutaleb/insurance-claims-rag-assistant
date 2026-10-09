@@ -1,11 +1,11 @@
-"""Policy ingestion adapter over ragkit (ragkit plan 06).
+"""Policy ingestion adapter over ragit (ragit plan 06).
 
 The OmniCare policy version tables (``policies``,
 ``policy_versions``, ``policy_ingestion_meta``) are
-application-side storage: ragkit's
-:class:`ragkit.ingestion.IngestionPipeline` orchestrates
+application-side storage: ragit's
+:class:`ragit.ingestion.IngestionPipeline` orchestrates
 load/hash/compare/retire/chunk/embed/upsert and talks to a
-:class:`ragkit.ingestion.VersionStore` protocol, which
+:class:`ragit.ingestion.VersionStore` protocol, which
 :class:`PolicyVersionStore` implements here against the
 OmniCare tables. This module is the permanent home for the
 binding; the historical ``app.rag.ingest`` module was
@@ -32,19 +32,19 @@ from app.database import async_session_factory
 from app.domain.policies.retriever import POLICY_RETRIEVER_SPEC
 from app.models.policy import Policy
 from app.models.policy_version import PolicyVersion
-from ragkit.chunking import (
+from ragit.chunking import (
     MarkdownSectionChunker,
     SlidingWindowChunker,
     sliding_window_chunk,
 )
-from ragkit.chunking.base import Chunker
-from ragkit.ingestion import (
+from ragit.chunking.base import Chunker
+from ragit.ingestion import (
     FileDocumentSource,
     IngestionPipeline,
     IngestionSnapshot,
     VersionRecord,
 )
-from ragkit.types import Chunk
+from ragit.types import Chunk
 
 logger = logging.getLogger(__name__)
 
@@ -66,7 +66,7 @@ The adapter wraps the chunker so the snapshot
 comparison stays stable and existing policies are not
 spuriously re-ingested. This is the ``chunker_version``
 trap flagged across plans 02, 04, and 06; this module
-is the permanent home for the mapping (ragkit plan 06).
+is the permanent home for the mapping (ragit plan 06).
 """
 
 
@@ -194,8 +194,8 @@ def chunk_policy_document(filepath: str) -> list[dict[str, Any]]:
     """Parse a Markdown policy file into structured, overlapping chunks.
 
     .. deprecated::
-        Use the ragkit ingestion pipeline with a
-        :class:`ragkit.chunking.MarkdownSectionChunker`
+        Use the ragit ingestion pipeline with a
+        :class:`ragit.chunking.MarkdownSectionChunker`
         instead. This wrapper remains for one release for
         backward compatibility.
 
@@ -232,7 +232,7 @@ def chunk_policy_document(filepath: str) -> list[dict[str, Any]]:
 async def ingest_policy(policy_path: str | None = None) -> int:
     """Ingest the policy document into the vector store.
 
-    Delegates to the ragkit :class:`IngestionPipeline`:
+    Delegates to the ragit :class:`IngestionPipeline`:
     loads the policy file, hashes its content, compares
     the ingestion snapshot against the active version,
     and -- when the source changed -- retires the old
