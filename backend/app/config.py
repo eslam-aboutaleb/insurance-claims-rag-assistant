@@ -64,7 +64,7 @@ class Settings(BaseSettings):
         default="litellm",
         description=(
             "Embedding provider selected through the ragit embedding "
-            "registry; 'litellm' is the historical behavior."
+            "registry; 'litellm' is the default."
         ),
     )
     embedding_drain_interval_seconds: float = Field(

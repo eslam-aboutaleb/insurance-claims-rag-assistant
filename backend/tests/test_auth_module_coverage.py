@@ -52,7 +52,6 @@ class TestAuthModule:
 
     @pytest.mark.asyncio
     async def test_get_current_user_account_not_found_clears_cookie(self):
-
         nonexistent_uuid = str(uuid.uuid4())
         payload = {"sub": nonexistent_uuid, "exp": 9999999999}
         token = jwt.encode(payload, SECRET_KEY, algorithm="HS256")

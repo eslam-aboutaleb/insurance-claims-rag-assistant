@@ -149,7 +149,7 @@ async def test_ingest_policy_success(tmp_path):
     assert pipeline_kwargs["settings"] is get_settings()
     assert pipeline_kwargs["version_id_key"] == "policy_version_id"
     assert pipeline_kwargs["source_id_key"] == "policy_id"
-    # The adapter reports the historical chunker version so stored
+    # The adapter reports the snapshot chunker version so stored
     # snapshots keep comparing equal (the chunker_version trap).
     assert pipeline_kwargs["chunker"].version == POLICY_CHUNKER_SNAPSHOT_VERSION
 

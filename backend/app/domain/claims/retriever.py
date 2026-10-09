@@ -1,4 +1,4 @@
-"""Claims retrieval adapter over ragit (ragit plan 06).
+"""Claims retrieval adapter over ragit.
 
 The OmniCare claims binding — the ``claims`` table, its
 ``description`` column, and the metadata columns returned
@@ -113,9 +113,7 @@ async def retrieve_claims_hybrid(  # noqa: PLR0913
 ) -> list[dict[str, Any]]:
     """Run hybrid search over the calling user's claims only.
 
-    Module-level entry point preserving the historical
-    ``app.rag.claims_rag.retrieve_claims_hybrid`` contract:
-    any retrieval failure is logged and reported as an empty
+    Module-level entry point. Any retrieval failure is logged and reported as an empty
     result set rather than raised.
 
     Args:

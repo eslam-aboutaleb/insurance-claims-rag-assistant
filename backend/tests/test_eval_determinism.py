@@ -1,13 +1,10 @@
 """
-Eval determinism test (ragit plan 05, validation 7).
+Eval determinism test.
 
-``run_evaluation`` moved to ragit with its retrieval
-function and dataset injected. This test drives the
-moved runner with a stubbed retrieval function and the
-application's curated dataset, and snapshots the
-resulting metrics: the formulas moved verbatim, so the
-deterministic metric keys must match the pre-move
-values exactly.
+``run_evaluation`` lives in the shared ``ragit`` library with its retrieval function and dataset
+injected. This test drives the moved runner with a stubbed retrieval function and the
+application's curated dataset, and snapshots the resulting metrics: the formulas moved
+verbatim, so the deterministic metric keys must match the pre-extraction values exactly.
 """
 
 from __future__ import annotations

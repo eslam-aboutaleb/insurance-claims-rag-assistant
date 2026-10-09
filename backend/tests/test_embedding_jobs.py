@@ -1,13 +1,10 @@
 """
-Tests for the OmniCare embedding-job adapter over ragit's
-outbox (ragit plan 05).
+Tests for the OmniCare embedding-job adapter over ragit's outbox.
 
-The retry/backoff/dead-letter engine itself is tested in
-``libs/ragit/tests`` against in-memory doubles; these tests
-pin the OmniCare adapter: the ``SqlAlchemyJobStore`` mapping
-(claim query, guarded processing transition, completion and
-failure updates) and the ``ClaimJobProcessor`` (claim amount
-lookup, embedding text, vector-index metadata).
+The retry/backoff/dead-letter engine itself is tested in ``libs/ragit/tests`` against
+in-memory doubles; these tests pin the OmniCare adapter: the ``SqlAlchemyJobStore`` mapping
+(claim query, guarded processing transition, completion and failure updates) and the
+``ClaimJobProcessor`` (claim amount lookup, embedding text, vector-index metadata).
 """
 
 from __future__ import annotations

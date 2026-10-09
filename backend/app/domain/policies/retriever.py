@@ -1,4 +1,4 @@
-"""Policy retrieval adapter over ragit (ragit plan 06).
+"""Policy retrieval adapter over ragit.
 
 The OmniCare policy chunk binding — the ``policy_chunks``
 table, its ``text`` column, and the metadata columns returned
@@ -31,9 +31,8 @@ class PolicyRetriever:
     """Hybrid retrieval over the OmniCare policy chunk table.
 
     Wraps ragit's :class:`ragit.retrieval.HybridRetriever`
-    with the policy chunk binding and exposes the historical
-    ``retrieve_hybrid`` signature so callers keep working
-    unchanged.
+    with the policy chunk binding. Any retrieval failure is logged and reported as an empty
+    result set rather than raised.
     """
 
     def __init__(self, settings: Any = None, session_factory: Any = None) -> None:
@@ -90,9 +89,7 @@ async def retrieve_hybrid(  # noqa: PLR0913
 ) -> list[dict[str, Any]]:
     """Run hybrid search over the OmniCare policy chunk table.
 
-    Module-level entry point preserving the historical
-    ``app.rag.retriever.retrieve_hybrid`` contract: any
-    retrieval failure is logged and reported as an empty
+    Module-level entry point. Any retrieval failure is logged and reported as an empty
     result set rather than raised.
 
     Args:

@@ -1,9 +1,8 @@
 """Coverage tests for the OmniCare embedding-job enqueue path.
 
-Moved from ``backend/tests/test_embedding_jobs_coverage.py``
-(ragit plan 05): the enqueue now delegates to ragit's
-outbox through the app-side store; these tests pin the
-app adapter's session handling and error logging.
+Moved from ``backend/tests/test_embedding_jobs_coverage.py``: the enqueue now delegates to
+ragit's outbox through the app-side store; these tests pin the app adapter's session
+handling and error logging.
 """
 
 from __future__ import annotations

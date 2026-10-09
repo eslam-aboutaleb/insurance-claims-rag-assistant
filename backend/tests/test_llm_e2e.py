@@ -95,17 +95,31 @@ class TestLiveLLMChatE2E:
         )
         assert submit_response.status_code == 200, submit_response.text
         submit_data = submit_response.json()
-        confirmation_id = None
+        confirmation_token = None
         for tool_call in submit_data.get("tool_calls", []):
-            if tool_call.get("name") == "submit_claim":
-                confirmation_id = tool_call.get("result", {}).get("confirmation_id")
+            if tool_call.get("name") == "prepare_claim_submission":
+                confirmation_token = tool_call.get("result", {}).get(
+                    "confirmation_token"
+                )
                 break
 
-        if not confirmation_id:
-            pytest.skip("Claim submission did not return a confirmation_id; cannot test lookup")
+        if not confirmation_token:
+            pytest.skip(
+                "Claim preparation did not return a confirmation_token; "
+                "cannot test lookup"
+            )
+
+        confirm_response = test_client.post(
+            "/api/v1/claims/confirm",
+            json={"confirmation_token": confirmation_token},
+            headers=e2e_user,
+        )
+        assert confirm_response.status_code == 200, confirm_response.text
+        claim_id = confirm_response.json()["claim_id"]
+        assert claim_id
 
         lookup_payload = {
-            "message": f"What is the status of claim {confirmation_id}?",
+            "message": f"What is the status of claim {claim_id}?",
         }
         lookup_response = test_client.post(
             "/api/v1/chat",
@@ -116,7 +130,7 @@ class TestLiveLLMChatE2E:
         lookup_data = lookup_response.json()
         assert "response" in lookup_data
         response_text = lookup_data["response"].lower()
-        assert confirmation_id.lower() in response_text or "submitted" in response_text
+        assert claim_id.lower() in response_text or "submitted" in response_text
 
     def test_prompt_injection_rejected(self, test_client, e2e_user):
         """
@@ -139,7 +153,7 @@ class TestLiveLLMChatE2E:
         assert response.status_code == 200, response.text
         data = response.json()
         assert "response" in data
-        response_text = data["response"].lower()
+        response_text = data["response"].lower().replace("\u2019", "'").replace("\u2018", "'")
 
         # Assert on disclosure, not on vocabulary. A refusal that says "I can't reveal
         # API keys" is the correct outcome, so rejecting the phrase "api key" would fail

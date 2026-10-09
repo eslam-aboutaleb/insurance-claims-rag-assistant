@@ -1,7 +1,7 @@
 """
 Outbox drainer for the ``embedding_jobs`` table.
 
-Thin app-side entry point (ragit plan 05): wires the
+Thin app-side entry point: wires the
 OmniCare job store and claim processor into ragit's
 generic drainer. The drain loop itself — per-pass stale
 reclaim, ``FOR UPDATE SKIP LOCKED`` claiming, failure

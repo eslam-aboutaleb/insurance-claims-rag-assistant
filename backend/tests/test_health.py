@@ -17,13 +17,13 @@ def test_health_returns_200(test_client):
     """
     response = test_client.get("/api/v1/health")
 
-    assert response.status_code == 200, (
-        f"Expected status code 200, got {response.status_code}. Response: {response.text}"
-    )
+    assert (
+        response.status_code == 200
+    ), f"Expected status code 200, got {response.status_code}. Response: {response.text}"
     data = response.json()
-    assert data == {"status": "healthy"}, (
-        f"Expected response body {{'status': 'healthy'}}, got: {data}"
-    )
+    assert data == {
+        "status": "healthy"
+    }, f"Expected response body {{'status': 'healthy'}}, got: {data}"
 
 
 def test_health_response_schema(test_client):
@@ -39,12 +39,12 @@ def test_health_response_schema(test_client):
     data = response.json()
 
     # Exact key set assertion - no extra or missing fields
-    assert set(data.keys()) == {"status"}, (
-        f"Expected exact keys {{'status'}}, got: {set(data.keys())}"
-    )
-    assert isinstance(data["status"], str), (
-        f"Expected 'status' to be a string, got {type(data['status'])}"
-    )
+    assert set(data.keys()) == {
+        "status"
+    }, f"Expected exact keys {{'status'}}, got: {set(data.keys())}"
+    assert isinstance(
+        data["status"], str
+    ), f"Expected 'status' to be a string, got {type(data['status'])}"
     assert data["status"] == "healthy"
 
     # Validate against Pydantic model
@@ -59,9 +59,9 @@ def test_health_method_post_not_allowed(test_client):
     """
     response = test_client.post("/api/v1/health", json={"dummy": "data"})
 
-    assert response.status_code == 405, (
-        f"Expected status code 405 Method Not Allowed for POST, got {response.status_code}"
-    )
+    assert (
+        response.status_code == 405
+    ), f"Expected status code 405 Method Not Allowed for POST, got {response.status_code}"
 
 
 def test_health_unhealthy_returns_503(test_client, monkeypatch):

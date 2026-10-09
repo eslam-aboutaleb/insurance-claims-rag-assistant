@@ -1,9 +1,8 @@
 """Coverage tests for the app.domain.embeddings adapter.
 
-The implementation lives in :mod:`ragit.embeddings` (ragit
-plan 02); these tests pin the shim's compatibility surface:
-the factory delegates to the ragit provider registry and the
-LiteLLM function class is re-exported unchanged.
+The implementation lives in :mod:`ragit.embeddings`; these tests pin the shim's compatibility
+surface: the factory delegates to the ragit provider registry and the LiteLLM function class is
+re-exported unchanged.
 """
 
 from __future__ import annotations

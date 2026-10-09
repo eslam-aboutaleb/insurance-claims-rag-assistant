@@ -1,16 +1,11 @@
 """
 Tests for app.domain.policies.ingestion -- the adapter over ragit.
 
-The advisory lock and the ingestion logic moved to
-:class:`ragit.ingestion.IngestionPipeline` (ragit
-plan 04) and are tested in ``libs/ragit/tests``
-(``test_ingestion_locking.py`` and
-``test_ingestion_pipeline.py``). These tests verify
-the adapter wiring only: that ``ingest_policy`` builds
-the pipeline, binds the policy file as the document
-source, and passes the policy path as the advisory-lock
-key so concurrent ingestion of the same policy stays
-serialized.
+The advisory lock and the ingestion logic live in :class:`ragit.ingestion.IngestionPipeline`
+(tested in ``libs/ragit/tests``: ``test_ingestion_locking.py`` and ``test_ingestion_pipeline.py``).
+These tests verify the adapter wiring only: that ``ingest_policy`` builds the pipeline, binds the
+policy file as the document source, and passes the policy path as the advisory-lock key so
+concurrent ingestion of the same policy stays serialized.
 """
 
 from unittest.mock import AsyncMock, MagicMock, patch

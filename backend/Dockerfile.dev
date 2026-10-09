@@ -55,6 +55,7 @@ RUN uv pip install -e .
 # Copy backend application source code.
 COPY backend/app/ ./app/
 COPY backend/tests/ ./tests/
+COPY .env.example ./.env.example
 
 # Create a non-root user to run the application
 RUN groupadd -r appuser && useradd -r -g appuser -d /app -s /sbin/nologin appuser \

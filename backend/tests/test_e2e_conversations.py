@@ -125,9 +125,9 @@ async def test_e2e_conversations_sidebar_and_url():
         assert detail_data["id"] == conversation_id, "ID mismatch in detail response"
         assert detail_data["title"] == conversation_title, "Title mismatch in detail response"
         # Each chat turn creates both a user message and an assistant response
-        assert len(detail_data["messages"]) == 2, (
-            f"Expected 2 messages in conversation, got {len(detail_data['messages'])}"
-        )
+        assert (
+            len(detail_data["messages"]) == 2
+        ), f"Expected 2 messages in conversation, got {len(detail_data['messages'])}"
 
         # Step 6: Send another message in the same session
         await _send_message(session, API_URL, token, "Second message in same conversation")
@@ -140,9 +140,9 @@ async def test_e2e_conversations_sidebar_and_url():
         detail_data2 = await _get_conversation(session, API_URL, token, conversation_id)
         assert detail_data2["id"] == conversation_id, "Conversation not accessible by ID"
         # After second message: 2 user + 2 assistant = 4 messages total
-        assert len(detail_data2["messages"]) == 4, (
-            f"Expected 4 messages in conversation, got {len(detail_data2['messages'])}"
-        )
+        assert (
+            len(detail_data2["messages"]) == 4
+        ), f"Expected 4 messages in conversation, got {len(detail_data2['messages'])}"
 
         # Step 8: Reset session and create a new conversation
         reset_resp = await session.post(
@@ -157,9 +157,9 @@ async def test_e2e_conversations_sidebar_and_url():
 
         # Step 9: Verify we now have 2 conversations
         conversations3 = await _list_conversations(session, API_URL, token)
-        assert len(conversations3) == 2, (
-            f"Expected 2 conversations after reset, got {len(conversations3)}"
-        )
+        assert (
+            len(conversations3) == 2
+        ), f"Expected 2 conversations after reset, got {len(conversations3)}"
 
         # Verify both conversations are accessible by their IDs
         conv_ids = [c["id"] for c in conversations3]

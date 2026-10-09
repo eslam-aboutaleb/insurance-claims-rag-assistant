@@ -1,4 +1,4 @@
-"""OmniCare RAG evaluation wiring over ragit (ragit plan 07).
+"""OmniCare RAG evaluation wiring over ragit.
 
 The evaluation harness (retrieval metrics, answer judges,
 the two-phase runner) is domain-agnostic (ragit); this
@@ -8,10 +8,6 @@ dataset grounded in ``sample_policy.md`` and the
 hybrid retriever and dataset into ragit's runner, so
 answer metrics are computed from the same retrieval
 context as the retrieval metrics.
-
-This module replaces the deprecated ``app.rag.eval_dataset``,
-``app.rag.eval_runner``, ``app.rag.evaluation``, and
-``app.rag.answer_evaluator`` shims (removed in plan 07).
 """
 
 from __future__ import annotations
@@ -43,6 +39,7 @@ class QuestionCategory(StrEnum):
     DEDUCTIBLES = "deductibles"
     REQUIREMENTS = "requirements"
     GENERAL = "general"
+
 
 # ---------------------------------------------------------------------------
 # Curated evaluation dataset grounded in sample_policy.md

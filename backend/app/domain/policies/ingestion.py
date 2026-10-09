@@ -1,4 +1,4 @@
-"""Policy ingestion adapter over ragit (ragit plan 06).
+"""Policy ingestion adapter over ragit.
 
 The OmniCare policy version tables (``policies``,
 ``policy_versions``, ``policy_ingestion_meta``) are
@@ -7,9 +7,7 @@ application-side storage: ragit's
 load/hash/compare/retire/chunk/embed/upsert and talks to a
 :class:`ragit.ingestion.VersionStore` protocol, which
 :class:`PolicyVersionStore` implements here against the
-OmniCare tables. This module is the permanent home for the
-binding; the historical ``app.rag.ingest`` module was
-removed in plan 07.
+OmniCare tables. This module is the permanent home for the binding.
 
 The stored snapshot carries ``chunker_version="v1"`` — the
 historical value — even though the chunker itself reports
@@ -65,8 +63,8 @@ existing deployments carry ``chunker_version="v1"``.
 The adapter wraps the chunker so the snapshot
 comparison stays stable and existing policies are not
 spuriously re-ingested. This is the ``chunker_version``
-trap flagged across plans 02, 04, and 06; this module
-is the permanent home for the mapping (ragit plan 06).
+trap flagged across ingestion and chunking; this module
+is the permanent home for the mapping.
 """
 
 

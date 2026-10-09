@@ -1,4 +1,4 @@
-"""Claims embedding-job outbox adapter over ragit (ragit plans 06-07).
+"""Claims embedding-job outbox adapter over ragit.
 
 The claim embedding job is the OmniCare binding of
 ragit's generic outbox: :class:`SqlAlchemyJobStore`
@@ -15,9 +15,6 @@ binding lives in :mod:`app.domain.claims.retriever`),
 and :func:`process_pending_jobs` /
 :func:`reclaim_stale_jobs` wire the store and processor
 into ragit's generic job functions.
-
-This module replaces the deprecated
-``app.rag.embedding_jobs`` shim (removed in plan 07).
 
 Invariant for anything that writes an ``embedding_jobs`` row
 ------------------------------------------------------------
@@ -378,10 +375,8 @@ async def enqueue_claim_embedding_job(  # noqa: PLR0913, PLR0917
 ) -> None:
     """Add an embedding job for a newly submitted claim.
 
-    OmniCare-named alias of :func:`enqueue_embedding_job`
-    (the historical name kept for the claim submission
-    path); see that function for the same-transaction
-    semantics.
+    OmniCare-named alias of :func:`enqueue_embedding_job`;
+    see that function for the same-transaction semantics.
     """
     await enqueue_embedding_job(
         claim_uuid,

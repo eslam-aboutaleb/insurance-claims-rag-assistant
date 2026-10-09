@@ -1,13 +1,10 @@
 """
 Tests for the OmniCare embedding drainer entry point.
 
-The drain loop itself moved to ``ragit.jobs.drainer``
-(ragit plan 05) and is tested in
-``libs/ragit/tests/test_embedding_drain.py``. These
-tests pin the app-side wiring: the thin ``main()``
-constructs the OmniCare store and claim processor and
-hands them, with the validated settings, to ragit's
-drainer.
+The drain loop itself lives in ``ragit.jobs.drainer`` and is tested in
+``libs/ragit/tests/test_embedding_drain.py``. These tests pin the app-side wiring: the
+thin ``main()`` constructs the OmniCare store and claim processor and hands them, with
+the validated settings, to ragit's drainer.
 """
 
 from __future__ import annotations

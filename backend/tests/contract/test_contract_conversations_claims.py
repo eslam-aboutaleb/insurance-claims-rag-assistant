@@ -75,9 +75,9 @@ def _first_conversation_id(contract_client: TestClient, user: SeededUser) -> str
     deadline = time.monotonic() + 5.0
     while time.monotonic() < deadline:
         response = contract_client.get("/api/v1/chat/conversations", headers=user.headers)
-        assert response.status_code == 200, (
-            f"conversation list failed: {response.text} user={user.user_id} rows={_dump_users()}"
-        )
+        assert (
+            response.status_code == 200
+        ), f"conversation list failed: {response.text} user={user.user_id} rows={_dump_users()}"
         conversations = response.json()["conversations"]
         if conversations:
             return conversations[0]["id"]

@@ -2,9 +2,8 @@
 Tier A golden contract tests for ``/api/v1/rag/evaluate`` and ``/api/v1/rag/dataset``.
 
 Only the response *key sets* and the dataset envelope are frozen here. Retrieval metric
-values are deliberately not frozen in Tier A: plan 01 B4 adds ``id`` to
-``hybrid_search`` results, which legitimately changes those numbers, so the values live
-in the Tier B baseline instead.
+values are deliberately not frozen in Tier A: adding ``id`` to ``hybrid_search`` results
+legitimately changes those numbers, so the values live in the Tier B baseline instead.
 """
 
 from __future__ import annotations

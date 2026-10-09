@@ -1,13 +1,10 @@
 """
 Tests for versioned policy ingestion (Feature 15: document-version-model).
 
-The ingestion orchestration moved to ragit (plan 04); the
-snapshot comparison that makes ingestion idempotent lives in
-``ragit.ingestion`` and is tested in
-``libs/ragit/tests/test_ingestion_pipeline.py``. These tests
-exercise the OmniCare ``PolicyVersionStore`` -- the
-``VersionStore`` implementation the adapter binds to the
-pipeline -- against the real test database.
+The ingestion orchestration and the snapshot comparison that makes ingestion idempotent live
+in the shared ``ragit`` library (tested in ``libs/ragit/tests/test_ingestion_pipeline.py``).
+These tests exercise the OmniCare ``PolicyVersionStore`` -- the ``VersionStore`` implementation
+the adapter binds to the pipeline -- against the real test database.
 """
 
 from __future__ import annotations

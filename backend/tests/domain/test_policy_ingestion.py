@@ -1,4 +1,4 @@
-"""Domain-level policy ingestion tests (ragit plan 06 T4b).
+"""Domain-level policy ingestion tests.
 
 The ``chunker_version`` trap: the stored snapshot carries
 ``chunker_version="v1"`` so an unchanged document compares

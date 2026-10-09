@@ -231,21 +231,21 @@ Powered by **Google Agent Development Kit (ADK)** and **LiteLLM**, the assistant
 | **Google ADK** _(Agent Development Kit)_ | **Enterprise Agent Framework** -- Standardized, resilient agent orchestration engine providing native session tracking, tool execution loops, and guardrails. | _ **Native Tool Orchestration**: Converts standard Python functions directly into model-consumable tool definitions.<br>_ **Multi-Turn Session State**: First-class `InMemorySessionService` cleanly isolates user conversations with FIFO eviction (max 500 sessions).<br>_ **Model Agnostic**: Seamlessly interfaces with third-party providers via LiteLLM.<br>_ **Clean Pattern**: Separates system instructions, tool definitions, and runtime execution. |
 | **LiteLLM**                              | **Universal LLM Proxy & Router** -- Decouples the core agent code from vendor-specific LLM APIs.                                                              | _ **100+ Provider Support**: Switch effortlessly between OpenAI, Anthropic, Google Gemini, Azure, and open-source models.<br>_ **Zero Code Changes**: Change the model with a single environment variable (`LLM_MODEL`).<br>\* **Standardized Input/Output**: Normalizes API schemas, cost tracking, and error handling across providers.                                                                                |
 | **pgvector**                          | **PostgreSQL Vector Extension** -- Native pgvector extension inside PostgreSQL for hybrid vector + PostgreSQL full-text search with Reciprocal Rank Fusion. | _ **Unified Storage**: Embeddings and keyword search live in the same Postgres instance as claims and conversations.<br>_ **Hybrid Search**: Combines vector similarity (HNSW) with PostgreSQL full-text search (tsvector/tsquery) using RRF for robust retrieval.<br>_ **No External Service**: Eliminates the need for a separate vector database process or Docker volume.                                                                                   |
-| **ragit** _(GitHub)_           | **Domain-Agnostic RAG Toolkit** -- Published package (pinned git dependency, `ragit[pgvector] @ v0.2.0`) carrying every generic RAG primitive: chunking, embeddings, vector stores, ingestion, evaluation, and the job outbox. | _ **Clean Separation**: OmniCare-specific bindings live in `backend/app/domain/`; generic machinery lives in `ragit`.<br>_ **Library Isolation**: ragit never imports `app.*`.<br>_ **Reusable**: Any FastAPI/SQLAlchemy service can adopt it; see [github.com/eslam-aboutaleb/ragkit](https://github.com/eslam-aboutaleb/ragkit). |
+| **ragit** _(GitHub)_           | **Domain-Agnostic RAG Toolkit** -- Published package (pinned git dependency, `ragit[pgvector] @ v0.2.0`) carrying every generic RAG primitive: chunking, embeddings, vector stores, ingestion, evaluation, and the job outbox. | _ **Clean Separation**: OmniCare-specific bindings live in `backend/app/domain/`; generic machinery lives in `ragit`.<br>_ **Library Isolation**: ragit never imports `app.*`.<br>_ **Reusable**: Any FastAPI/SQLAlchemy service can adopt it; see [github.com/eslam-aboutaleb/ragit](https://github.com/eslam-aboutaleb/ragit). |
 
 ### The ragit Library
 
-The RAG subsystem is extracted into an installable, domain-agnostic library so the retrieval machinery can be reused (and tested) independently of OmniCare's schema. `ragit` is published from [github.com/eslam-aboutaleb/ragkit](https://github.com/eslam-aboutaleb/ragkit) (the GitHub repo is named `ragkit`; the Python package inside is `ragit`). The backend pins it as a git dependency with the `pgvector` extra in `backend/pyproject.toml`:
+The RAG subsystem is extracted into an installable, domain-agnostic library so the retrieval machinery can be reused (and tested) independently of OmniCare's schema. `ragit` is published from [github.com/eslam-aboutaleb/ragit](https://github.com/eslam-aboutaleb/ragit). The backend pins it as a git dependency with the `pgvector` extra in `backend/pyproject.toml`:
 
 ```
-"ragit[pgvector] @ git+https://github.com/eslam-aboutaleb/ragkit.git@v0.2.0",
+"ragit[pgvector] @ git+https://github.com/eslam-aboutaleb/ragit.git@v0.2.0",
 ```
 
 | ragit module           | Responsibility                                                                                              |
 | :----------------------- | :---------------------------------------------------------------------------------------------------------- |
 | `ragit.chunking`        | `MarkdownSectionChunker`, `SlidingWindowChunker`, and the chunker registry                                  |
 | `ragit.embeddings`      | `EmbeddingFunction` protocol, LiteLLM implementation, dimension validation, provider registry               |
-| `ragit.stores`          | `PgVectorStore` (hybrid vector + PostgreSQL full-text search with RRF) and an in-memory store               |
+| `ragit.stores`          | Vector stores: `PgVectorStore` (hybrid vector + PostgreSQL full-text search with RRF), `QdrantStore`, `ChromaStore`, `FaissStore`, and `InMemoryVectorStore` |
 | `ragit.ingestion`       | `IngestionPipeline` (hash/compare/retire/chunk/embed/upsert), document sources, snapshot versioning, locking |
 | `ragit.jobs`            | Outbox `EmbeddingJobStore` protocol, `process_pending_jobs`, `reclaim_stale_jobs`, drainer CLI              |
 | `ragit.evaluation`      | RAG evaluation harness: retrieval metrics (precision/recall@k, MRR) and LLM-judged answer metrics           |
@@ -425,7 +425,7 @@ Configure these settings in `.env` (or pass via container environment):
 
 ## Running Tests
 
-OmniCare Financial includes automated tests with Pytest covering authentication, RAG ingestion, vector retrieval, agent tool execution, idempotency, and API endpoints. The backend suite (410 tests) runs against a dedicated test database (`OMNICARE_TEST_DATABASE_URL`) and exercises core paths and corner cases (empty inputs, invalid parameters, locking, stale-job reclaim, versioning, and cross-user isolation). The generic RAG machinery is covered by the ragit package's own test suite, published from [github.com/eslam-aboutaleb/ragkit](https://github.com/eslam-aboutaleb/ragkit).
+OmniCare Financial includes automated tests with Pytest covering authentication, RAG ingestion, vector retrieval, agent tool execution, idempotency, and API endpoints. The backend suite (410 tests) runs against a dedicated test database (`OMNICARE_TEST_DATABASE_URL`) and exercises core paths and corner cases (empty inputs, invalid parameters, locking, stale-job reclaim, versioning, and cross-user isolation). The generic RAG machinery is covered by the ragit package's own test suite, published from [github.com/eslam-aboutaleb/ragit](https://github.com/eslam-aboutaleb/ragit).
 
 ### Run Tests Locally
 
@@ -482,6 +482,7 @@ omnicare-financial/
 +-- docker-compose.yml              # Multi-container orchestration & networking
 +-- docker-compose.dev.yml          # Development overrides
 +-- pyproject.toml                  # uv workspace root (backend)
++-- uv.lock                         # Locked workspace dependencies (incl. ragit git pin)
 +-- README.md                       # Comprehensive project documentation
 +-- sonar-project.properties        # SonarQube configuration
 +-- Makefile                        # Baseline harness targets (Tier A/B/C)
@@ -491,7 +492,6 @@ omnicare-financial/
 |   +-- Dockerfile.dev              # Development image with hot reload
 |   +-- .dockerignore               # Backend build context filter
 |   +-- pyproject.toml              # Build tool specifications
-|   +-- uv.lock                     # Locked backend dependencies
 |   +-- alembic/                    # Database migration version control
 |   |   +-- env.py                  # Alembic environment configuration
 |   |   +-- script.py.mako          # Migration template

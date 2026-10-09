@@ -1,4 +1,4 @@
-# OmniCare Financial — Phase 0 baseline targets (plan part A4).
+# OmniCare Financial — Phase 0 baseline targets.
 #
 # Each target runs one black-box tier of the baseline harness
 # and writes its report under .kilo/baseline/ (Tier A/B) or

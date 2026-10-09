@@ -64,7 +64,16 @@ def test_env_example_placeholder_is_covered_by_the_validator() -> None:
     """
     from pathlib import Path
 
-    example = Path(__file__).resolve().parents[2] / ".env.example"
+    # Locate .env.example by walking up from this test file. The repo layout
+    # differs between the host (backend/tests/... -> repo root) and the Docker
+    # image (/app/tests/... -> /app), so a fixed parents[2] is fragile.
+    example = None
+    for candidate in Path(__file__).resolve().parents:
+        candidate = candidate / ".env.example"
+        if candidate.is_file():
+            example = candidate
+            break
+    assert example, ".env.example not found by walking up from this test file"
     placeholder = None
     for raw in example.read_text(encoding="utf-8").splitlines():
         if raw.strip().startswith("JWT_SECRET_KEY="):

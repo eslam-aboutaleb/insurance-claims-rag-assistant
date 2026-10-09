@@ -72,9 +72,9 @@ async def test_policy_version_numeric_columns_are_integers() -> None:
         types = await connection.run_sync(_inspect)
 
     for name in ("embedding_dim", "chunk_size", "overlap"):
-        assert isinstance(types[name], sa_types.Integer), (
-            f"policy_versions.{name} is {types[name]!r}; ingestion writes an int into it"
-        )
+        assert isinstance(
+            types[name], sa_types.Integer
+        ), f"policy_versions.{name} is {types[name]!r}; ingestion writes an int into it"
 
 
 @pytest.mark.asyncio

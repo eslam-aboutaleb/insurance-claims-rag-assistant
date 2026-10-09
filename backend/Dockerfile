@@ -5,7 +5,7 @@
 # Build context: the REPOSITORY ROOT (see docker-compose.yml), not ./backend.
 # The generic RAG machinery comes from the published ``ragit``
 # package, pinned as a git dependency in backend/pyproject.toml
-# (ragit[pgvector] @ github.com/eslam-aboutaleb/ragkit@v0.2.0).
+# (ragit[pgvector] @ github.com/eslam-aboutaleb/ragit@v0.2.0).
 # uv needs git to clone that dependency, so git is installed
 # below alongside the build toolchain.
 # ==============================================================================
@@ -48,6 +48,7 @@ COPY backend/app/ ./app/
 COPY backend/tests/ ./tests/
 COPY backend/alembic.ini ./
 COPY backend/alembic/ ./alembic/
+COPY .env.example ./.env.example
 
 # Create a non-root user to run the application
 RUN groupadd -r appuser && useradd -r -g appuser -d /app -s /sbin/nologin appuser \

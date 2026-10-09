@@ -62,9 +62,9 @@ class TestSignup:
         }
         response = test_client.post("/api/v1/auth/signup", json=payload)
 
-        assert response.status_code == 201, (
-            f"Expected 201, got {response.status_code}: {response.text}"
-        )
+        assert (
+            response.status_code == 201
+        ), f"Expected 201, got {response.status_code}: {response.text}"
         data = response.json()
         assert "access_token" in data
         assert data["token_type"] == "bearer"
@@ -213,9 +213,9 @@ class TestSignin:
         response = test_client.post(
             "/api/v1/auth/signin", json={"username": username, "password": password}
         )
-        assert response.status_code == 200, (
-            f"Expected 200, got {response.status_code}: {response.text}"
-        )
+        assert (
+            response.status_code == 200
+        ), f"Expected 200, got {response.status_code}: {response.text}"
         data = response.json()
         assert "access_token" in data
         assert data["token_type"] == "bearer"

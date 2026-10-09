@@ -1,8 +1,7 @@
 """
 Tests for app.domain.policies.tools module.
 
-Moved from tests/test_policy_rag.py (ragit plan 06):
-the tool moved to the domain adapter, so the patches
+Moved from tests/test_policy_rag.py: the tool moved to the domain adapter, so the patches
 target ``app.domain.policies.tools``.
 """
 

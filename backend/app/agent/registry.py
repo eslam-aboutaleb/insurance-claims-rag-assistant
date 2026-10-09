@@ -1,4 +1,6 @@
-"""Tool registry for the OmniCare agent (ragit plan 07).
+"""Tool registry for the OmniCare agent.
+
+The registry is the single place the agent's toolset is
 
 The registry is the single place the agent's toolset is
 declared: adding a tool is one ``register`` call, with no
@@ -65,8 +67,7 @@ def build_default_registry() -> ToolRegistry:
 
     Returns:
         A registry with ``query_policy``, ``get_claim_status``,
-        ``search_claims``, and ``prepare_claim_submission`` —
-        the historical agent toolset, in the historical order.
+        ``search_claims``, and ``prepare_claim_submission``.
     """
     registry = ToolRegistry()
     registry.register(

@@ -1,4 +1,4 @@
-"""OmniCare embedding and vector-store wiring over ragit (ragit plan 07).
+"""OmniCare embedding and vector-store wiring over ragit.
 
 The embedding provider registry and the vector-store ABCs
 are domain-agnostic (ragit); this module is the OmniCare
@@ -6,10 +6,6 @@ wiring: it selects the provider from the application
 settings and injects the app's session factory, embedding
 function, and embedding dimension — the dependencies
 ragit, being domain-agnostic, cannot import itself.
-
-This module replaces the deprecated ``app.rag.embedding``,
-``app.rag.embedding_dimensions``, ``app.rag.vector_store``,
-and ``app.rag.pgvector_store`` shims (removed in plan 07).
 """
 
 from __future__ import annotations

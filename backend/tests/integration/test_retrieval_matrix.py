@@ -68,9 +68,9 @@ async def test_query_class_surfaces_expected_sections(
     )
     surfaced = {result["metadata"]["section"] for result in results}
     for section in entry["expected_sections"]:
-        assert section in surfaced, (
-            f"query {entry['query']!r} did not surface {section!r}; surfaced {sorted(surfaced)}"
-        )
+        assert (
+            section in surfaced
+        ), f"query {entry['query']!r} did not surface {section!r}; surfaced {sorted(surfaced)}"
 
 
 @pytest.mark.asyncio
@@ -165,9 +165,9 @@ async def test_retrieval_metrics_match_baseline(tierb_seed: dict[str, Any]):
 
     baseline = json.loads(BASELINE_PATH.read_text(encoding="utf-8"))
     for key in ("recall_at_5", "precision_at_5", "mrr"):
-        assert abs(metrics[key] - baseline[key]) <= 0.10 * abs(baseline[key]) + 1e-9, (
-            f"{key} drifted: {metrics[key]:.4f} vs baseline {baseline[key]:.4f}"
-        )
+        assert (
+            abs(metrics[key] - baseline[key]) <= 0.10 * abs(baseline[key]) + 1e-9
+        ), f"{key} drifted: {metrics[key]:.4f} vs baseline {baseline[key]:.4f}"
     assert metrics["p50_latency_ms"] <= baseline["p50_latency_ms"] * 2.0 + 25.0, (
         f"p50 latency {metrics['p50_latency_ms']:.1f}ms exceeds the drift "
         f"bound for baseline {baseline['p50_latency_ms']:.1f}ms"

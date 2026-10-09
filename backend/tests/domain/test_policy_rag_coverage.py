@@ -1,6 +1,7 @@
 """Coverage tests for app.domain.policies.tools uncovered paths.
 
-Moved from tests/test_policy_rag_coverage.py (ragit plan 06).
+Moved from tests/test_policy_rag_coverage.py: the tool moved to the domain adapter, so the
+patches target ``app.domain.policies.tools``.
 """
 
 from __future__ import annotations

@@ -99,9 +99,9 @@ def compare_to_golden(
         )
         return
 
-    assert golden_path.exists(), (
-        f"Missing golden file {golden_path}. Record it once with: pytest --contract-update-goldens"
-    )
+    assert (
+        golden_path.exists()
+    ), f"Missing golden file {golden_path}. Record it once with: pytest --contract-update-goldens"
 
     expected = json.loads(golden_path.read_text(encoding="utf-8"))
     actual_text = json.dumps(scrubbed, indent=2)
@@ -207,7 +207,7 @@ def install_scripted_llm() -> Iterator[Callable[[ScriptedTurn], ScriptedLlm]]:
     Installation is explicit rather than autouse so a scenario that must observe a real
     failure can leave the real model in place. The real model is restored on teardown.
 
-    The agent is built lazily on first use (plan 07), so ``get_runner()`` is
+    The agent is built lazily on first use, so ``get_runner()`` is
     called first to force construction before the model is captured.
 
     Yields:
@@ -215,7 +215,7 @@ def install_scripted_llm() -> Iterator[Callable[[ScriptedTurn], ScriptedLlm]]:
     """
     from app.agent import agent as agent_module  # noqa: PLC0415
 
-    agent_module.get_runner()  # plan 07: the agent is built lazily on first use
+    agent_module.get_runner()  # the agent is built lazily on first use
     original = agent_module.omnicare_agent.model
     installed: list[ScriptedLlm] = []
 

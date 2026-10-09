@@ -1,4 +1,4 @@
-# uv workspace root (ragit plan 07).
+# uv workspace root.
 #
 # The workspace makes ``backend`` resolve its
 # dependencies as a single project. The generic RAG

@@ -1,6 +1,6 @@
 """Coverage tests for app.domain.claims.tools uncovered paths.
 
-Moved from tests/test_search_claims_coverage.py (ragit plan 06).
+Moved from tests/test_search_claims_coverage.py.
 """
 
 from __future__ import annotations

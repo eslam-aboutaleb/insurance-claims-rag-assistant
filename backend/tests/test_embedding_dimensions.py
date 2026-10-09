@@ -1,12 +1,9 @@
 """Tests for the ragit.embeddings re-export shim.
 
-The implementation lives in :mod:`ragit.embeddings.dimensions`
-(ragit plan 02). Covers the provider dimension table, the
-warning-and-fallback path for models that are not registered
-(the corner case a deployment hits when it swaps in an
-embedding provider the table does not know about), and
-resolution of the configured model when no explicit model is
-passed.
+The implementation lives in :mod:`ragit.embeddings.dimensions`. Covers the provider dimension
+table, the warning-and-fallback path for models that are not registered (the corner case a
+deployment hits when it swaps in an embedding provider the table does not know about), and
+resolution of the configured model when no explicit model is passed.
 """
 
 from __future__ import annotations

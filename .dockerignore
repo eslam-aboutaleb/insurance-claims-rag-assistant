@@ -17,6 +17,11 @@
 .env
 .env.*
 
+# Exception: .env.example is a template of placeholders, not real secrets.
+# It is needed inside the image so tests/test_jwt_secret_gate.py can read
+# JWT_SECRET_KEY from it to verify the validator rejects every shipped placeholder.
+!.env.example
+
 # Frontend source and dependencies (built separately from ./frontend)
 frontend
 node_modules

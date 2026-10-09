@@ -9,7 +9,6 @@ is responsible for parsing the SSE stream and rendering partial responses
 as they arrive.
 """
 
-import asyncio
 import json
 import logging
 
@@ -98,7 +97,7 @@ async def chat_stream(
     Validates the request payload, then delegates to the ADK agent runner
     in streaming mode. Each ADK event is serialized to JSON and yielded as
     an SSE ``data:`` chunk. After the stream completes, the conversation
-    turn is persisted to the database in the background.
+    turn is persisted to the database before the stream closes.
 
     Args:
         payload: Validated chat request containing the user message.
@@ -148,18 +147,20 @@ async def chat_stream(
             # Always emit response_complete and persist the conversation turn,
             # even when the LLM stream fails. This guarantees the frontend
             # receives a terminal event and the conversation appears in the
-            # sidebar regardless of downstream errors.
+            # sidebar regardless of downstream errors. The turn is awaited
+            # here (rather than fired off with asyncio.create_task) so the
+            # stream only closes once the turn is durably saved -- a detached
+            # task could otherwise commit after the response finished and
+            # race with the next request or a test's database reset.
             sources_payload = json.dumps(stream_result.sources)
             yield (f'data: {{"type": "response_complete", "sources": {sources_payload}}}\n\n')
 
             if stream_result.session_id:
-                asyncio.create_task(
-                    _persist_streamed_turn(
-                        user_id=current_user_id,
-                        session_id=stream_result.session_id,
-                        message=message,
-                        result=stream_result,
-                    )
+                await _persist_streamed_turn(
+                    user_id=current_user_id,
+                    session_id=stream_result.session_id,
+                    message=message,
+                    result=stream_result,
                 )
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
@@ -173,8 +174,8 @@ async def _persist_streamed_turn(
 ) -> None:
     """Persist a streamed conversation turn to the database.
 
-    This function runs as a background task after the SSE stream completes.
-    It catches and logs any errors without affecting the streaming response.
+    This function runs when the SSE stream finishes. It catches and logs
+    any errors without affecting the streaming response.
 
     Args:
         user_id: The authenticated user's ID.

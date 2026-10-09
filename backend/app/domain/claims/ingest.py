@@ -1,13 +1,11 @@
-"""Claims ingestion adapter over ragit (ragit plan 06).
+"""Claims ingestion adapter over ragit.
 
 Claim ingestion writes directly into the ``claims``
 vector store (the binding lives in
 :mod:`app.domain.claims.retriever`): the claim text is
 embedded, the embedding is validated against the
 configured dimension, and the claim row is upserted
-with its metadata. This module is the permanent home
-for the binding; the historical ``app.rag.claims_rag``
-module was removed in plan 07.
+with its metadata. This module is the permanent home for the binding.
 """
 
 from __future__ import annotations
