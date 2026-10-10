@@ -2397,7 +2397,7 @@ dependencies = [
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "python-dotenv" },
-    { name = "ragit", extra = ["pgvector"] },
+    { name = "ragit-toolkit", extra = ["pgvector"] },
     { name = "slowapi" },
     { name = "sqlalchemy", extra = ["asyncio"] },
     { name = "uvicorn", extra = ["standard"] },
@@ -2418,7 +2418,7 @@ requires-dist = [
     { name = "pytest", specifier = ">=8.3.0" },
     { name = "pytest-asyncio", specifier = ">=0.24.0" },
     { name = "python-dotenv", specifier = "==1.0.1" },
-    { name = "ragit", extras = ["pgvector"], git = "https://github.com/eslam-aboutaleb/ragit.git?rev=v0.3.0" },
+    { name = "ragit-toolkit", extras = ["pgvector"], git = "https://github.com/eslam-aboutaleb/ragit.git?rev=v0.3.1" },
     { name = "slowapi", specifier = ">=0.1.9" },
     { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.0.30,<2.1.0" },
     { name = "uvicorn", extras = ["standard"], specifier = "==0.34.0" },
@@ -3146,9 +3146,9 @@ wheels = [
 ]
 
 [[package]]
-name = "ragit"
-version = "0.3.0"
-source = { git = "https://github.com/eslam-aboutaleb/ragit.git?rev=v0.3.0#4fa6e92616510635fe6dfe7cc4ea1f5809a8fb41" }
+name = "ragit-toolkit"
+version = "0.3.1"
+source = { git = "https://github.com/eslam-aboutaleb/ragit.git?rev=v0.3.1#ade3fd54a7569093e1ac507976e57c0e57e49822" }
 
 [package.optional-dependencies]
 pgvector = [
