@@ -481,8 +481,6 @@ omnicare-financial/
 +-- .pre-commit-config.yaml         # Pre-commit hooks (ruff, prettier)
 +-- docker-compose.yml              # Multi-container orchestration & networking
 +-- docker-compose.dev.yml          # Development overrides
-+-- pyproject.toml                  # uv workspace root (backend)
-+-- uv.lock                         # Locked workspace dependencies (incl. ragit git pin)
 +-- README.md                       # Comprehensive project documentation
 +-- sonar-project.properties        # SonarQube configuration
 +-- Makefile                        # Baseline harness targets (Tier A/B/C)
@@ -492,6 +490,7 @@ omnicare-financial/
 |   +-- Dockerfile.dev              # Development image with hot reload
 |   +-- .dockerignore               # Backend build context filter
 |   +-- pyproject.toml              # Build tool specifications
+|   +-- uv.lock                     # Locked dependencies (incl. ragit git pin)
 |   +-- alembic/                    # Database migration version control
 |   |   +-- env.py                  # Alembic environment configuration
 |   |   +-- script.py.mako          # Migration template
