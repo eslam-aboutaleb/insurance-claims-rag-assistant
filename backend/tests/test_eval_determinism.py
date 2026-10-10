@@ -71,8 +71,9 @@ async def test_run_evaluation_metrics_match_pre_move_snapshot():
     )
     assert len(dataset) == 2
 
+    # ragit 0.3.0 renamed "end-to-end" context scoring to "context".
     result = await run_evaluation(
-        EvalConfig(mode="end-to-end", judge="heuristic", n_results=5),
+        EvalConfig(mode="context", judge="heuristic", n_results=5),
         _stubbed_retrieval_fn,
         dataset,
         settings=_settings(),
@@ -114,13 +115,13 @@ async def test_run_evaluation_is_deterministic_across_runs():
     )
 
     first = await run_evaluation(
-        EvalConfig(mode="end-to-end", judge="heuristic", n_results=5),
+        EvalConfig(mode="context", judge="heuristic", n_results=5),
         _stubbed_retrieval_fn,
         dataset,
         settings=_settings(),
     )
     second = await run_evaluation(
-        EvalConfig(mode="end-to-end", judge="heuristic", n_results=5),
+        EvalConfig(mode="context", judge="heuristic", n_results=5),
         _stubbed_retrieval_fn,
         dataset,
         settings=_settings(),

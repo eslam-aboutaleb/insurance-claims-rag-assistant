@@ -371,16 +371,23 @@ class RagEvalRequest(BaseModel):
     """Request schema for initiating a RAG evaluation run.
 
     Attributes:
-        mode: Evaluation mode ('retrieval-only' or 'end-to-end').
+        mode: Evaluation mode. 'retrieval-only' evaluates retrieval
+            quality only; 'context' scores the retrieved context
+            against the gold answer; 'end-to-end' is currently
+            mapped to 'context' until an answer generator is wired.
         judge: Evaluation judge strategy ('heuristic' or 'llm').
         n_results: Maximum candidates to retrieve per query.
         category: Optional category filter (coverage, limits, exclusions, etc.).
         difficulty: Optional difficulty filter (easy, medium, hard).
     """
 
-    mode: Literal["retrieval-only", "end-to-end"] = Field(
+    mode: Literal["retrieval-only", "context", "end-to-end"] = Field(
         default="end-to-end",
-        description="Evaluation mode: 'retrieval-only' or 'end-to-end'",
+        description=(
+            "Evaluation mode: 'retrieval-only', 'context' (scores the "
+            "retrieved context against the gold answer), or 'end-to-end' "
+            "(currently mapped to 'context' until an answer generator is wired)"
+        ),
     )
     judge: Literal["heuristic", "llm"] = Field(
         default="heuristic",

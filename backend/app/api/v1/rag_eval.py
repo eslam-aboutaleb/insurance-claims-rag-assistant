@@ -1,7 +1,10 @@
 """
 RAG Evaluation API endpoints.
 
-POST /api/v1/rag/evaluate - Trigger an evaluation run (retrieval-only or end-to-end)
+POST /api/v1/rag/evaluate - Trigger an evaluation run
+    (retrieval-only, context, or end-to-end; end-to-end
+    requests are mapped to context mode until an answer
+    generator is wired)
 GET  /api/v1/rag/dataset  - List the curated evaluation queries and ground truth
 """
 
@@ -33,8 +36,13 @@ router = APIRouter()
     summary="Run RAG Evaluation",
     description=(
         "Executes RAG evaluation across the curated test dataset. "
-        "Supports retrieval quality metrics (Recall@K, Precision@K, MRR, latency) "
-        "and answer quality metrics (faithfulness, relevance, completeness, conciseness)."
+        "Supports three modes: 'retrieval-only' (retrieval quality "
+        "metrics only), 'context' (scores the retrieved context "
+        "against the gold answer), and 'end-to-end' (currently "
+        "mapped to 'context' until an answer generator is wired). "
+        "Reports retrieval quality metrics (Recall@K, Precision@K, "
+        "MRR, latency) and answer quality metrics (faithfulness, "
+        "relevance, completeness, conciseness)."
     ),
     responses={
         status.HTTP_200_OK: {

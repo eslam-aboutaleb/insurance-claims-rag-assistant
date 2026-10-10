@@ -13,6 +13,7 @@ context as the retrieval metrics.
 from __future__ import annotations
 
 import logging
+from dataclasses import replace
 from enum import StrEnum
 from typing import Any
 
@@ -212,13 +213,25 @@ async def run_evaluation(config: EvalConfig | None = None) -> EvalResult:
 
     Args:
         config: Evaluation configuration. If None, uses defaults
-            (end-to-end mode with heuristic judge).
+            (context mode with heuristic judge). Requests for the
+            legacy "end-to-end" mode are mapped transparently to
+            "context" (see below).
 
     Returns:
         EvalResult with all metrics and per-sample details.
     """
     if config is None:
         config = EvalConfig()
+
+    # ragit 0.3.0 renamed context scoring to mode="context";
+    # mode="end-to-end" now requires an injected answer_fn
+    # (a real answer generator), which this app does not wire.
+    # The app's historical "end-to-end" semantics — scoring the
+    # retrieved context against the gold answer — live on as
+    # ragit's "context" mode, so map the request transparently.
+    # (ragit's EvalConfig is a dataclass, hence dataclasses.replace.)
+    if config.mode == "end-to-end":
+        config = replace(config, mode="context")
 
     async def _retrieval_fn(query: str) -> list[dict[str, Any]]:
         return await retrieve_hybrid(query=query, n_results=config.n_results)
