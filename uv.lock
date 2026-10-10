@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = ">=3.11"
 resolution-markers = [
     "python_full_version >= '3.14'",
@@ -2418,7 +2418,7 @@ requires-dist = [
     { name = "pytest", specifier = ">=8.3.0" },
     { name = "pytest-asyncio", specifier = ">=0.24.0" },
     { name = "python-dotenv", specifier = "==1.0.1" },
-    { name = "ragit", extras = ["pgvector"], git = "https://github.com/eslam-aboutaleb/ragit.git?rev=v0.2.0" },
+    { name = "ragit", extras = ["pgvector"], git = "https://github.com/eslam-aboutaleb/ragit.git?rev=v0.3.0" },
     { name = "slowapi", specifier = ">=0.1.9" },
     { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.0.30,<2.1.0" },
     { name = "uvicorn", extras = ["standard"], specifier = "==0.34.0" },
@@ -3147,12 +3147,8 @@ wheels = [
 
 [[package]]
 name = "ragit"
-version = "0.2.0"
-source = { git = "https://github.com/eslam-aboutaleb/ragit.git?rev=v0.2.0#22b1f2ee75b6ffb194e48d1ed132c385e31c237b" }
-dependencies = [
-    { name = "litellm" },
-    { name = "pydantic-settings" },
-]
+version = "0.3.0"
+source = { git = "https://github.com/eslam-aboutaleb/ragit.git?rev=v0.3.0#4fa6e92616510635fe6dfe7cc4ea1f5809a8fb41" }
 
 [package.optional-dependencies]
 pgvector = [
