@@ -42,7 +42,8 @@ Powered by **Google Agent Development Kit (ADK)** and **LiteLLM**, the assistant
 |                                              +---------------------------------------+  |
 |                                              |          ADK Agent Runtime            |  |
 |                                              |  * Google ADK LlmAgent & Runner       |  |
-|                                              |  * InMemorySessionService per User    |  |
+|                                              |  * ADK session service per User       |  |
+|                                              |  * memory or PostgreSQL-backed        |  |
 |                                              |  * FIFO Session Eviction (max 500)    |  |
 |                                              |  * Prompt Safety & Injection Defense  |  |
 |                                              +-------------------+-------------------+  |
@@ -214,7 +215,7 @@ Powered by **Google Agent Development Kit (ADK)** and **LiteLLM**, the assistant
     docker compose up --build
     ```
 
-    Docker Compose builds and starts four services: the PostgreSQL 16 (pgvector) database, the FastAPI backend, the `embedding-drain` worker (drains the embedding-job outbox), and the React/Vite frontend. The backend and worker wait for the database health check; the frontend waits for the backend health check (`/api/v1/health`) to report `healthy` before accepting traffic. The database is published on `127.0.0.1:15432` (loopback only) to avoid colliding with a local PostgreSQL on 5432.
+    Docker Compose builds and starts six services: the PostgreSQL 16 (pgvector) database (`db`), Redis (`redis`, shared idempotency and rate-limit state), the FastAPI backend, two drain workers — `embedding-drain` for the embedding-job outbox and `notification-drain` for the notification-job outbox — and the React/Vite frontend. The backend and both workers wait for the database health check; the frontend waits for the backend health check (`/api/v1/health`) to report `healthy` before accepting traffic. The database is published on `127.0.0.1:15432` and Redis on `127.0.0.1:16379` (both loopback only) to avoid colliding with a local PostgreSQL on 5432.
 
 4. **Open the Application**
     Navigate to [http://localhost:3000](http://localhost:3000) in your browser. The backend will automatically:
@@ -228,17 +229,17 @@ Powered by **Google Agent Development Kit (ADK)** and **LiteLLM**, the assistant
 
 | Technology                               | Selection Rationale                                                                                                                                           | Key Advantages                                                                                                                                                                                                                                                                                                                                                                                                           |
 | :--------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------ | :----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Google ADK** _(Agent Development Kit)_ | **Enterprise Agent Framework** -- Standardized, resilient agent orchestration engine providing native session tracking, tool execution loops, and guardrails. | _ **Native Tool Orchestration**: Converts standard Python functions directly into model-consumable tool definitions.<br>_ **Multi-Turn Session State**: First-class `InMemorySessionService` cleanly isolates user conversations with FIFO eviction (max 500 sessions).<br>_ **Model Agnostic**: Seamlessly interfaces with third-party providers via LiteLLM.<br>_ **Clean Pattern**: Separates system instructions, tool definitions, and runtime execution. |
+| **Google ADK** _(Agent Development Kit)_ | **Enterprise Agent Framework** -- Standardized, resilient agent orchestration engine providing native session tracking, tool execution loops, and guardrails. | _ **Native Tool Orchestration**: Converts standard Python functions directly into model-consumable tool definitions.<br>_ **Multi-Turn Session State**: A swappable `BaseSessionService`, so in-process storage and the PostgreSQL-backed store share one contract and the runner is unchanged by the swap.<br>_ **Model Agnostic**: Seamlessly interfaces with third-party providers via LiteLLM.<br>_ **Clean Pattern**: Separates system instructions, tool definitions, and runtime execution. |
 | **LiteLLM**                              | **Universal LLM Proxy & Router** -- Decouples the core agent code from vendor-specific LLM APIs.                                                              | _ **100+ Provider Support**: Switch effortlessly between OpenAI, Anthropic, Google Gemini, Azure, and open-source models.<br>_ **Zero Code Changes**: Change the model with a single environment variable (`LLM_MODEL`).<br>\* **Standardized Input/Output**: Normalizes API schemas, cost tracking, and error handling across providers.                                                                                |
 | **pgvector**                          | **PostgreSQL Vector Extension** -- Native pgvector extension inside PostgreSQL for hybrid vector + PostgreSQL full-text search with Reciprocal Rank Fusion. | _ **Unified Storage**: Embeddings and keyword search live in the same Postgres instance as claims and conversations.<br>_ **Hybrid Search**: Combines vector similarity (HNSW) with PostgreSQL full-text search (tsvector/tsquery) using RRF for robust retrieval.<br>_ **No External Service**: Eliminates the need for a separate vector database process or Docker volume.                                                                                   |
-| **ragit** _(GitHub)_           | **Domain-Agnostic RAG Toolkit** -- Published package (pinned git dependency, `ragit[pgvector] @ v0.2.0`) carrying every generic RAG primitive: chunking, embeddings, vector stores, ingestion, evaluation, and the job outbox. | _ **Clean Separation**: OmniCare-specific bindings live in `backend/app/domain/`; generic machinery lives in `ragit`.<br>_ **Library Isolation**: ragit never imports `app.*`.<br>_ **Reusable**: Any FastAPI/SQLAlchemy service can adopt it; see [github.com/eslam-aboutaleb/ragit](https://github.com/eslam-aboutaleb/ragit). |
+| **ragit** _(GitHub)_           | **Domain-Agnostic RAG Toolkit** -- Published package (pinned git dependency, `ragit-toolkit[pgvector] @ v0.3.1`) carrying every generic RAG primitive: chunking, embeddings, vector stores, ingestion, evaluation, and the job outbox. | _ **Clean Separation**: OmniCare-specific bindings live in `backend/app/domain/`; generic machinery lives in `ragit`.<br>_ **Library Isolation**: ragit never imports `app.*`.<br>_ **Reusable**: Any FastAPI/SQLAlchemy service can adopt it; see [github.com/eslam-aboutaleb/ragit](https://github.com/eslam-aboutaleb/ragit). |
 
 ### The ragit Library
 
 The RAG subsystem is extracted into an installable, domain-agnostic library so the retrieval machinery can be reused (and tested) independently of OmniCare's schema. `ragit` is published from [github.com/eslam-aboutaleb/ragit](https://github.com/eslam-aboutaleb/ragit). The backend pins it as a git dependency with the `pgvector` extra in `backend/pyproject.toml`:
 
 ```
-"ragit[pgvector] @ git+https://github.com/eslam-aboutaleb/ragit.git@v0.2.0",
+"ragit-toolkit[pgvector] @ git+https://github.com/eslam-aboutaleb/ragit.git@v0.3.1",
 ```
 
 | ragit module           | Responsibility                                                                                              |
@@ -251,9 +252,50 @@ The RAG subsystem is extracted into an installable, domain-agnostic library so t
 | `ragit.evaluation`      | RAG evaluation harness: retrieval metrics (precision/recall@k, MRR) and LLM-judged answer metrics           |
 | `ragit.validation`      | SQL identifier allowlist and embedding dimension checks                                                     |
 
-**Domain adapters** (`backend/app/domain/`) bind ragit to OmniCare's tables: `domain/policies/` owns policy versioning and ingestion, `domain/claims/` owns claim ingestion, the embedding-job outbox, and owner-scoped claim retrieval, and `domain/embeddings.py` wires the embedding function and vector store. The claims adapter always passes `owner_id` as a retrieval filter, so cross-user data leakage is structurally impossible.
+**Domain adapters** (`backend/app/domain/`) bind ragit to OmniCare's tables: `domain/policies/` owns policy versioning and ingestion, `domain/claims/` owns claim ingestion, the embedding-job outbox, and owner-scoped claim retrieval, `domain/procedures/` owns the second index of domain procedure playbooks, and `domain/embeddings.py` wires the embedding function and vector store. The claims adapter always passes `owner_id` as a retrieval filter, so cross-user data leakage is structurally impossible.
 
 **Embedding drain worker** (`embedding-drain` service): claim embeddings never block claim submission. `POST /api/v1/claims/confirm` writes the claim and its `embedding_jobs` row in the same transaction (outbox pattern); the drainer worker claims pending jobs with `FOR UPDATE SKIP LOCKED`, generates the embedding, and upserts it into pgvector. Multiple drainer replicas scale without coordination, and jobs stuck in `processing` past `JOB_STALE_AFTER_SECONDS` are reclaimed automatically.
+
+### The Procedures Index
+
+`domain/procedures/` is a **second document index next to the policy one**. It holds domain *procedure playbooks* — currently `coverage-review.md` (the coverage determination checklist) and `claim-triage.md` (intake triage) in `backend/app/data/procedures/` — and the agent loads one on demand through the `get_procedure` tool.
+
+"Skills" here means playbooks retrieved as documents, for two concrete reasons: ADK 1.3 has no loader for Claude-style on-disk skill bundles, and the app drives models through `LiteLlm` on ADK's chat-completions path rather than the Responses API, so the OpenAI Skills API's `skill_reference` is not consumable. The payoff is token cost — the system prompt stays as it is, and a compliance update is an edit to a markdown file instead of a prompt edit plus a deploy.
+
+Each playbook carries an explicit **When to invoke** and **Do NOT invoke for** section. That is what makes retrieval-driven loading behave like a skill rather than a text dump: the model gets the boundary along with the procedure.
+
+Running it:
+
+```bash
+# Re-index the procedures corpus (idempotent: an unchanged playbook is
+# detected by snapshot comparison and is not re-embedded)
+docker-compose exec backend python -m app.domain.procedures.ingestion
+
+# Ingest automatically on startup (default: enabled)
+OMNICARE_INGEST_PROCEDURES=true docker-compose up -d backend
+
+# Skip it when booting against a database that is already indexed
+OMNICARE_INGEST_PROCEDURES=false docker-compose up -d backend
+
+# Tests (against a dedicated test database)
+cd backend && python -m pytest tests/test_procedures_retrieval.py -q -p no:randomly
+```
+
+### Notifications
+
+Claim transitions have to tell the policyholder something happened. `domain/notifications/` is a **second outbox next to the embedding one**, and it obeys the same rule: the API writes the job row inside the claim's own transaction, and the `notification-drain` worker is the only thing that materialises the message in the recipient's feed. A provider that is slow or down therefore becomes a delayed notification instead of a failed claim transition, and the drainer claims rows with `FOR UPDATE SKIP LOCKED` so extra replicas scale without coordination.
+
+The invariant that follows is sharper than referential integrity: a notification job must commit **in the same transaction** as the claim change it describes. A job row that survives a rolled-back status change tells a policyholder about a transition that never happened, and there is no way to take that back once it has been read. The claim change is the fact; the notification is a promise about it, so the two land together or neither lands. `enqueue_notification_job(session=...)` flushes into the caller's session for exactly this reason, and calling it without one is only correct where the claim change is already durable.
+
+The title and body are rendered from a per-job-type template table (`render_notification`), not by a model call. Three reasons, all of them cost-shaped: a notification is a fixed string about a stored fact, so a model invocation per delivery buys nothing; the worker must not spend money to say "your claim moved"; and two drainers running two prompt versions would otherwise show the same claimant two different phrasings of the same event.
+
+### Admin & Audit
+
+`app/api/v1/admin.py` is the operator's read surface over the data no policyholder may see: a cross-owner claims queue, embedding-outbox depth and dead letters, the paged audit trail, and the feed of answers users marked down. Every route sits behind `require_role("admin")`, and there is deliberately no admin UI and no write surface — this is the read API a console consumes, not something a browser can drive.
+
+The response envelopes (`AdminClaimPage`, `EmbeddingJobPage`, `AuditEventPage`, `DownRatedAnswerPage`) live in that module rather than in `app/schemas/models.py` because they describe rows owned by other modules. The shared schema module is the frozen contract surface of the public API; an admin page shape has no business appearing in it, and putting one there would freeze an internal shape by accident.
+
+`app/audit.py` records the trail itself from two directions. `record_audit` is called by a route inside the transaction that performs the audited action, so the entry commits with it — authentication events and feedback submissions go this way. The claim lifecycle (submission, status transitions, withdrawal) is recorded from a `ClaimEvent` flush listener instead, because that half is owned by code the audit module must not reach into, and a listener also catches a transition written by any future caller. Both paths share one trade: an audit write that fails is logged and swallowed, because an outage of the trail must not take the business action down with it. That means an entry can be missing during an incident, which is the same trade every append-only log makes and the reason this table is not a foreign key to success.
 
 ---
 
@@ -281,20 +323,58 @@ The RAG subsystem is extracted into an installable, domain-agnostic library so t
 | Method | Path | Description |
 |--------|------|-------------|
 | `GET` | `/api/v1/chat/conversations` | List authenticated user's conversations |
-| `GET` | `/api/v1/chat/conversations/{id}` | Get full message history for a conversation |
+| `GET` | `/api/v1/chat/conversations/{conversation_id}` | Get full message history for a conversation |
 
 ### Claims Endpoints
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `POST` | `/api/v1/claims/prepare` | Validate and create a pending claim submission |
+| `POST` | `/api/v1/claims/prepare` | Validate and create a pending claim submission (returns `confirmation_token`) |
 | `POST` | `/api/v1/claims/confirm` | Confirm and submit a pending claim |
+| `POST` | `/api/v1/claims/cancel` | Cancel a pending claim submission before it is confirmed |
+| `GET` | `/api/v1/claims` | List the authenticated user's claims |
+| `GET` | `/api/v1/claims/{claim_id}` | Read one claim, owner-scoped |
+| `POST` | `/api/v1/claims/{claim_id}/status` | Move a claim to a new status (owner-scoped; only withdrawal is a policyholder's own transition) |
+| `POST` | `/api/v1/claims/{claim_id}/withdraw` | Withdraw a claim |
+
+### RAG Evaluation Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/api/v1/rag/evaluate` | Score retrieval and answer quality for the policy corpus |
+| `GET` | `/api/v1/rag/dataset` | Read the evaluation dataset |
+
+### Feedback Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/api/v1/feedback` | Record a thumbs-up or thumbs-down rating on the caller's own answer |
+| `DELETE` | `/api/v1/feedback/{message_id}` | Remove the caller's rating on one message |
+
+### Notification Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/v1/notifications` | Read the authenticated user's in-app feed |
+| `POST` | `/api/v1/notifications/{notification_id}/read` | Mark one notification as read |
+
+### Admin Endpoints
+
+Every route below requires the `admin` role; the response envelopes are defined in `app/api/v1/admin.py`.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/v1/admin/claims` | The cross-owner claims queue, paged |
+| `GET` | `/api/v1/admin/embedding-jobs` | Embedding-outbox depth and dead-lettered jobs |
+| `GET` | `/api/v1/admin/audit` | The paged audit trail |
+| `GET` | `/api/v1/admin/feedback` | The feed of answers users marked down |
 
 ### Health & Docs
 
 | Method | Path | Description |
 |--------|------|-------------|
 | `GET` | `/api/v1/health` | Service health check |
+| `GET` | `/api/v1/health/detailed` | Database probe plus model-call spend, tool latency, outbox depth, and rate-limit rejections. Registered separately from `/health` so that pinned contract and its response shape stay untouched; a degraded sink is reported in the body, not as a failure. |
 | `GET` | `/docs` | Swagger UI interactive API documentation |
 | `GET` | `/redoc` | ReDoc API documentation |
 
@@ -420,12 +500,64 @@ Configure these settings in `.env` (or pass via container environment):
 | `JWT_SECRET_KEY`          | _(auto-generated)_            |    No    | Secret key for signing JWT tokens. Auto-generated in development; must be set in production.        |
 | `LOG_LEVEL`              | `INFO`                        |    No    | Logging verbosity level (DEBUG, INFO, WARNING, ERROR, CRITICAL).                                    |
 | `RAG_DISTANCE_THRESHOLD` | `1.3`                         |    No    | Maximum L2 distance for RAG vector search (lower = stricter matching).                              |
+| `OMNICARE_INGEST_PROCEDURES` | `true`                    |    No    | Whether to index the procedure playbooks during startup. Ingestion is idempotent, so the cost after the first run is a file read and a snapshot comparison. |
+
+Compose-level variables (read by `docker-compose.yml`, not by `Settings`):
+
+| Variable | Default Value | Required | Purpose & Description |
+| :------- | :------------ | :------: | :-------------------- |
+| `POSTGRES_HOST_PORT` | `15432` | No | Host port the `db` container publishes on, bound to loopback only. Keep in sync with `DATABASE_URL`; it is not 5432 so it does not collide with a locally installed PostgreSQL. |
+| `REDIS_HOST_PORT` | `16379` | No | Host port the `redis` container publishes on, loopback only. |
+
+Observability:
+
+| Variable | Default Value | Required | Purpose & Description |
+| :------- | :------------ | :------: | :-------------------- |
+| `OBSERVABILITY_ENABLED` | `true` | No | Master switch for the request-id correlation middleware, structured log records, per-tool latency instrumentation, and `GET /api/v1/health/detailed`. `false` removes the hooks themselves rather than only silencing their output. |
+| `LLM_COST_TRACKING_ENABLED` | `true` | No | Whether the LiteLLM callback that records tokens, dollar cost, and latency per model call is registered. Disable only when an external tracer already collects the same data. |
+| `LOG_FORMAT` | `json` | No | Log record encoding. `json` writes one JSON object per line with the correlation id as a field, which is what a log aggregator expects; `text` keeps the single-line layout for reading logs by eye. |
+
+Redis and shared stores:
+
+| Variable | Default Value | Required | Purpose & Description |
+| :------- | :------------ | :------: | :-------------------- |
+| `REDIS_URL` | `""` | No | Redis connection URI (e.g. `redis://redis:6379/0`). Empty means no Redis is configured and every store below keeps its in-process behaviour. Redis carries idempotency and rate-limit state only, never sessions. |
+| `REDIS_CONNECT_TIMEOUT_SECONDS` | `1` | No | Seconds to wait for a Redis TCP connection before the store gives up and falls back to in-process state. Kept short so an unresponsive Redis never stalls a request. |
+| `REDIS_SOCKET_TIMEOUT_SECONDS` | `2` | No | Seconds to wait for a Redis reply before the command is abandoned and the store falls back to in-process state. |
+| `IDEMPOTENCY_STORAGE` | `memory` | No | Where successful chat responses are cached for replay: `memory` (per process) or `redis` (one cache across every replica). A Redis outage degrades to `memory` rather than failing the request. |
+| `RATE_LIMIT_STORAGE` | `memory` | No | Where rate-limit counters live: `memory` counts per process (so N replicas allow N x the quota), `redis` makes the per-minute limit global. The limiter fails open on a Redis outage. |
+
+Session storage (PostgreSQL, not Redis):
+
+| Variable | Default Value | Required | Purpose & Description |
+| :------- | :------------ | :------: | :-------------------- |
+| `SESSION_STORAGE` | `memory` | No | Where ADK conversation sessions live: `memory` (in-process, lost on restart) or `database` (the `agent_sessions` and `agent_session_events` tables), which lets any replica continue any conversation. Switching a running deployment abandons the sessions that process held. |
+| `SESSION_HISTORY_TURNS` | `20` | No | Most-recent persisted turns replayed into a session that has none of its own — a fresh session, a new replica, or the first turn after the storage swap. |
+| `SESSION_HISTORY_COMPACTION_TURNS` | `60` | No | Older turns folded into the single compaction summary that precedes the replayed history, so a long conversation stays inside the model's context window. |
+
+Background workers:
+
+| Variable | Default Value | Required | Purpose & Description |
+| :------- | :------------ | :------: | :-------------------- |
+| `INGEST_ON_STARTUP` | `true` | No | Whether to index the policy document during API startup. Set `false` to boot against an already-indexed database and skip the cost on every boot. |
+| `EMBEDDING_DRAIN_INTERVAL_SECONDS` | `5` | No | Idle sleep of the embedding drainer between empty passes. |
+| `EMBEDDING_DRAIN_BATCH_SIZE` | `10` | No | Embedding jobs the drainer claims per pass. |
+| `NOTIFICATION_DRAIN_INTERVAL_SECONDS` | `5` | No | Idle sleep of the notification drainer between empty passes. These only affect how quickly a claimant is told their claim moved; delivery never runs on the request path. |
+| `NOTIFICATION_DRAIN_BATCH_SIZE` | `10` | No | Notification jobs the drainer delivers per pass. |
+| `JOB_STALE_AFTER_SECONDS` | `300` | No | Seconds after which a job stuck in `processing` is treated as abandoned by a dead worker and reclaimed to `pending`. Guards both outbox drainers. |
+| `WORKER_ID` | _(host-pid)_ | No | Identity stamped onto jobs a drainer claims, so concurrent drainers are distinguishable in `locked_by`. |
+
+Testing:
+
+| Variable | Default Value | Required | Purpose & Description |
+| :------- | :------------ | :------: | :-------------------- |
+| `OMNICARE_TEST_DATABASE_URL` | _(None)_ | No | Database the suite runs against. It must contain `test` in its name, or the run aborts: the per-test fixture deletes every row in every application table, so pointing it at the stack's own database would destroy live development data. |
 
 ---
 
 ## Running Tests
 
-OmniCare Financial includes automated tests with Pytest covering authentication, RAG ingestion, vector retrieval, agent tool execution, idempotency, and API endpoints. The backend suite (410 tests) runs against a dedicated test database (`OMNICARE_TEST_DATABASE_URL`) and exercises core paths and corner cases (empty inputs, invalid parameters, locking, stale-job reclaim, versioning, and cross-user isolation). The generic RAG machinery is covered by the ragit package's own test suite, published from [github.com/eslam-aboutaleb/ragit](https://github.com/eslam-aboutaleb/ragit).
+OmniCare Financial includes automated tests with Pytest covering authentication, RAG ingestion, vector retrieval, agent tool execution, idempotency, and API endpoints. The backend suite runs against a dedicated test database (`OMNICARE_TEST_DATABASE_URL`) and exercises core paths and corner cases (empty inputs, invalid parameters, locking, stale-job reclaim, versioning, and cross-user isolation). It is organised in three layers: a tier of API-level suites under `tests/`, domain-level tests under `tests/domain/`, database-backed integration tests under `tests/integration/`, and a frozen HTTP contract suite under `tests/contract/`. The generic RAG machinery is covered by the ragit package's own test suite, published from [github.com/eslam-aboutaleb/ragit](https://github.com/eslam-aboutaleb/ragit).
 
 ### Run Tests Locally
 
@@ -444,7 +576,7 @@ cd backend
 python -m pytest tests/ --cov=app --cov-report=term-missing
 ```
 
-The backend suite maintains **98% line coverage** of `app/` (target: >90%).
+Line coverage of `backend/app` is measured with `pytest --cov=app` and the suite is held to a >90% target. Run it before opening a pull request rather than trusting a number quoted here: coverage moves with every change, so a figure committed to this file is stale the moment it is written.
 
 ### Run Tests Inside Docker Container
 
@@ -460,11 +592,11 @@ docker-compose exec backend pytest tests/ -v
 | `tests/test_chat.py` | Non-streaming chat endpoint, idempotency, error handling |
 | `tests/test_chat_stream.py` | Streaming SSE endpoint, event transformation |
 | `tests/test_idempotency.py` | Idempotency key caching, body hash verification |
-| `tests/test_rag.py` | Policy retrieval, hybrid search, RRF scoring |
-| `tests/test_pgvector_store.py` | pgvector hybrid search, upsert, count operations |
+| `tests/test_rag.py` | Policy retrieval, hybrid search, RRF scoring, chunking |
 | `tests/test_claim_status.py` | Claim status lookup, owner scoping |
 | `tests/test_submit_claim.py` | Claim preparation and confirmation flow |
-| `tests/test_search_claims.py` | Natural language claims search |
+| `tests/domain/test_search_claims.py` | Natural language claims search, owner-scoped |
+| `tests/test_procedures_retrieval.py` | Procedure playbook ingestion, idempotency, and `get_procedure` scoping |
 | `tests/test_conversation_store.py` | Conversation persistence, message metadata |
 | `tests/test_security_isolation.py` | Cross-user data isolation, horizontal privilege escalation |
 | `tests/test_llm_e2e.py` | End-to-end LLM integration tests |
@@ -489,21 +621,32 @@ omnicare-financial/
 |   +-- Dockerfile                  # Python 3.11-slim production image (uv-only)
 |   +-- Dockerfile.dev              # Development image with hot reload
 |   +-- .dockerignore               # Backend build context filter
-|   +-- pyproject.toml              # Build tool specifications
-|   +-- uv.lock                     # Locked dependencies (incl. ragit git pin)
+|   +-- .env.example                # Backend-side environment template
+|   +-- pyproject.toml              # Build tool specifications (incl. the ragit git pin)
+|   +-- README.md                   # Backend engineering guide
+|   +-- alembic.ini                 # Alembic CLI configuration
 |   +-- alembic/                    # Database migration version control
 |   |   +-- env.py                  # Alembic environment configuration
 |   |   +-- script.py.mako          # Migration template
-|   |   +-- versions/               # Migration scripts
+|   |   +-- versions/               # Migration scripts (19 migrations)
 |   |       +-- 6f253a5df2e9_initial_schema.py
 |   |       +-- a1b2c3d4e5f6_add_pgvector_embeddings.py
 |   |       +-- 822df1979a12_add_conversation_messages_claim_.py
+|   |       +-- b6f2c8a4d1e7_create_notification_jobs_and_feed_tables.py
+|   |       +-- b8c3d9e4f1a6_add_audit_events_and_user_role.py
+|   |       +-- c9e1a4b6d8f0_create_answer_feedback_table.py
+|   |       +-- e3b9c4d7a1f2_create_procedure_index_tables.py
+|   |       +-- f1a4b7c2d9e3_create_eval_runs_table.py
+|   |       +-- f3c8a1d7b2e9_create_claim_events_table.py
+|   |       +-- fc60119aea11_merge_policy_and_claim_heads.py
+|   |       +-- ...                 # the remaining migration scripts
 |   +-- app/
 |   |   +-- __init__.py             # Package init
 |   |   +-- config.py               # Pydantic Settings configuration loader
 |   |   +-- main.py                 # FastAPI application, CORS, lifespan hooks
 |   |   +-- database.py             # SQLAlchemy async engine & session factory
 |   |   +-- auth.py                 # JWT auth, Argon2 hashing, cookie management
+|   |   +-- audit.py                # Append-only audit trail + ClaimEvent flush listener
 |   |   +-- middleware.py           # Request size limit middleware
 |   |   +-- rate_limiter.py         # SlowAPI rate limiting configuration
 |   |   +-- idempotency.py          # Request idempotency cache with TTL
@@ -530,12 +673,17 @@ omnicare-financial/
 |   |   |       +-- health.py       # GET /api/v1/health check endpoint
 |   |   |       +-- auth.py         # POST /signup, /signin, /logout, /me
 |   |   |       +-- conversations.py # GET /chat/conversations, /chat/conversations/{id}
-|   |   |       +-- claims.py       # POST /claims/prepare, /claims/confirm
+|   |   |       +-- claims.py       # Claim lifecycle: prepare, confirm, cancel, list, get, status, withdraw
+|   |   |       +-- feedback.py     # POST /feedback, DELETE /feedback/{message_id}
+|   |   |       +-- notifications.py # GET /notifications, POST /notifications/{id}/read
+|   |   |       +-- admin.py        # GET /admin/* (role-gated queue, jobs, audit, feedback)
 |   |   |       +-- rag_eval.py     # POST /rag/evaluate, GET /rag/dataset
-|   |   +-- domain/                 # Domain adapters over ragit (plan 06)
+|   |   +-- domain/                 # Domain adapters over ragit
 |   |   |   +-- __init__.py         # Domain package init
 |   |   |   +-- embeddings.py       # EmbeddingFactory + vector store wiring
 |   |   |   +-- evaluation.py       # RAG evaluation CLI runner
+|   |   |   +-- evaluation_cli.py   # Command-line entry point for the evaluation run
+|   |   |   +-- evaluation_runs.py  # EvalRun persistence
 |   |   |   +-- claims/             # Claims domain bindings
 |   |   |   |   +-- __init__.py     # Claims package init
 |   |   |   |   +-- ingest.py       # Claim ingestion into the claims vector store
@@ -543,44 +691,102 @@ omnicare-financial/
 |   |   |   |   +-- retriever.py    # Claims hybrid retrieval (owner-scoped)
 |   |   |   |   +-- tools.py        # search_claims tool binding
 |   |   |   +-- policies/           # Policies domain bindings
-|   |   |       +-- __init__.py     # Policies package init
-|   |   |       +-- ingestion.py    # Policy versioning + ingestion pipeline
-|   |   |       +-- retriever.py    # Policy hybrid retrieval
-|   |   |       +-- tools.py        # query_policy tool binding
-|   |   +-- data/                   # Policy documents
+|   |   |   |   +-- __init__.py     # Policies package init
+|   |   |   |   +-- ingestion.py    # Policy versioning + ingestion pipeline
+|   |   |   |   +-- retriever.py    # Policy hybrid retrieval
+|   |   |   |   +-- tools.py        # query_policy tool binding
+|   |   |   +-- procedures/         # Procedure playbook bindings (second index)
+|   |   |   |   +-- __init__.py     # Procedures package init
+|   |   |   |   +-- ingestion.py    # Procedure corpus ingestion + startup gate
+|   |   |   |   +-- store.py        # ProcedureVersionStore (ragit VersionStore)
+|   |   |   |   +-- retrieval.py    # Procedure hybrid retrieval
+|   |   |   |   +-- tools.py        # get_procedure tool binding
+|   |   |   +-- notifications/      # Notification outbox bindings
+|   |   |       +-- __init__.py     # Notifications package init
+|   |   |       +-- outbox.py       # Notification-job store, templates, and drain wiring
+|   |   +-- data/                   # Policy documents and mock claims
 |   |   |   +-- sample_policy.md    # Source policy document for RAG
+|   |   |   +-- mock_claims.json    # Baseline claims for local development and tests
+|   |   |   +-- procedures/         # Domain procedure playbooks
+|   |   |       +-- coverage-review.md # Coverage determination procedure
+|   |   |       +-- claim-triage.md    # Intake triage procedure
 |   |   +-- models/                 # SQLAlchemy ORM models
 |   |   |   +-- __init__.py         # Models package init
 |   |   |   +-- base.py             # Declarative base with common columns
 |   |   |   +-- user.py             # User model (Argon2 password hashes)
 |   |   |   +-- claim.py            # Claim model
 |   |   |   +-- claim_submission.py # ClaimSubmission model (pending claims)
+|   |   |   +-- claim_event.py      # ClaimEvent model (claim lifecycle history)
 |   |   |   +-- conversation.py     # Conversation model (JSONB messages)
 |   |   |   +-- conversation_message.py # ConversationMessage model (normalized)
+|   |   |   +-- answer_feedback.py  # AnswerFeedback model (per-user answer ratings)
+|   |   |   +-- audit_event.py      # AuditEvent model (append-only audit trail)
+|   |   |   +-- notification_job.py # NotificationJob + Notification models (feed)
+|   |   |   +-- policy.py           # Policy model
 |   |   |   +-- policy_chunk.py     # PolicyChunk model
 |   |   |   +-- policy_version.py   # PolicyVersion model (ingestion snapshots)
+|   |   |   +-- procedure_version.py # ProcedureVersion model (playbook snapshots)
 |   |   |   +-- policy_ingestion_meta.py # Per-source ingestion metadata
 |   |   |   +-- embedding_job.py    # EmbeddingJob model
+|   |   +-- observability/          # Request-id, structured logs, metrics, telemetry
+|   |   |   +-- __init__.py         # Observability package init
+|   |   |   +-- request_context.py  # Correlation-id ContextVar
+|   |   |   +-- logging_config.py   # Structured record formatter
+|   |   |   +-- metrics.py          # Bounded in-process metric store
+|   |   |   +-- middleware.py       # RequestIdMiddleware
+|   |   |   +-- llm_callback.py     # LiteLLM success/failure cost + latency hooks
+|   |   |   +-- tool_instrumentation.py # Per-tool call and latency instrumentation
+|   |   |   +-- routes.py           # GET /api/v1/health/detailed
 |   |   +-- schemas/                # Pydantic data schemas
 |   |   |   +-- __init__.py         # Schemas package init
 |   |   |   +-- models.py           # Request, response, and claim validation models
 |   |   +-- workers/                # Background workers
+|   |       +-- __init__.py         # Workers package init
 |   |       +-- embedding_drain.py  # Outbox drainer (FOR UPDATE SKIP LOCKED)
+|   |       +-- notification_drain.py  # Notification outbox drainer
 |   +-- tests/
-|       +-- conftest.py             # Shared fixtures
-|       +-- test_health.py          # Health endpoint tests
-|       +-- test_auth_security.py   # Authentication & security tests
-|       +-- test_chat.py            # Chat endpoint tests
-|       +-- test_chat_stream.py     # Streaming chat endpoint tests
-|       +-- test_idempotency.py     # Idempotency tests
-|       +-- test_rag.py             # RAG retrieval tests
-|       +-- test_pgvector_store.py  # pgvector store tests
-|       +-- test_claim_status.py    # Claim lookup tests
-|       +-- test_submit_claim.py    # Claim submission tests
-|       +-- test_search_claims.py   # Claims search tests
-|       +-- test_conversation_store.py # Conversation persistence tests
-|       +-- test_security_isolation.py # Cross-user isolation tests
-|       +-- test_llm_e2e.py         # End-to-end LLM integration tests
+|   |   +-- conftest.py             # Shared fixtures (both-sided per-test database reset)
+|   |   +-- baselines/              # RAG baseline snapshots
+|   |   |   +-- rag_baseline.json
+|   |   +-- test_health.py          # Health endpoint tests
+|   |   +-- test_auth_security.py   # Authentication & security tests
+|   |   +-- test_chat.py            # Chat endpoint tests
+|   |   +-- test_chat_stream.py     # Streaming chat endpoint tests
+|   |   +-- test_idempotency.py     # Idempotency tests
+|   |   +-- test_rag.py             # RAG retrieval tests
+|   |   +-- test_claim_status.py    # Claim lookup tests
+|   |   +-- test_submit_claim.py    # Claim submission tests
+|   |   +-- test_conversation_store.py # Conversation persistence tests
+|   |   +-- test_security_isolation.py # Cross-user isolation tests
+|   |   +-- test_llm_e2e.py         # End-to-end LLM integration tests
+|   |   +-- test_procedures_retrieval.py # Procedure playbook ingestion & get_procedure scoping
+|   |   +-- test_agent.py           # Agent registry, tools, and prompt contract surface
+|   |   +-- test_prompt_contract.py # System prompt contract (guardrails and boundaries)
+|   |   +-- test_config.py          # Settings validation and gates
+|   |   +-- test_claim_lifecycle.py # Claim status transitions and withdrawals
+|   |   +-- test_claims_read_api.py # GET /claims, GET /claims/{id} owner scoping
+|   |   +-- test_conversations_api.py # Conversation list and detail API
+|   |   +-- test_rag_eval.py        # RAG evaluation endpoints and dataset
+|   |   +-- test_feedback_api.py    # Answer feedback API
+|   |   +-- test_admin_api.py       # Role-gated admin queue, jobs, audit, feedback
+|   |   +-- test_notification_outbox.py # Notification jobs, templates, and drain
+|   |   +-- test_distributed_state.py # Redis-shared idempotency/rate limits + DB sessions
+|   |   +-- test_observability.py   # Request ids, metrics, telemetry, detailed health
+|   |   +-- contract/               # Frozen HTTP contract suite
+|   |   |   +-- conftest.py         # Contract harness (golden comparison)
+|   |   |   +-- llm_double.py       # Deterministic LLM double for keyless runs
+|   |   |   +-- golden/             # Recorded response bodies for pinned routes
+|   |   |   +-- test_contract_auth.py
+|   |   |   +-- test_contract_auth_modes.py
+|   |   |   +-- test_contract_chat.py
+|   |   |   +-- test_contract_errors.py
+|   |   |   +-- test_contract_claim_atomicity.py
+|   |   |   +-- test_contract_conversations_claims.py
+|   |   |   +-- test_contract_rag_eval.py
+|   |   +-- domain/                 # Domain-level unit tests (claims, policies, retrieval)
+|   |   +-- integration/            # Database-backed integration tests
+|   +-- scripts/                    # Baseline harness scripts
+|       +-- baseline.sh             # Tier A/B selection for the baseline harness
 |
 +-- frontend/                       # React + Vite Web Application
     +-- Dockerfile                  # Multi-stage Node 20-alpine build
@@ -595,8 +801,7 @@ omnicare-financial/
         +-- App.tsx                 # Router configuration (login, signup, chat)
         +-- providers.tsx           # React providers wrapper
         +-- vite-env.d.ts           # Vite type declarations
-        +-- app/
-        |   +-- globals.css         # Global styling & scrollbars
+        +-- globals.css             # Global styling & scrollbars
         +-- pages/
         |   +-- RootRedirect.tsx    # Root route redirect
         |   +-- LoginPage.tsx       # User sign-in page
@@ -606,7 +811,7 @@ omnicare-financial/
         |   +-- ChatInput.tsx       # Message input box with keyboard shortcuts
         |   +-- ChatWindow.tsx      # Main conversation window with autoscroll
         |   +-- MessageBubble.tsx   # Message rendering with markdown, sources, tools
-        |   +-- ChatMessageList.tsx # Scrollable message list container
+        |   +-- ClaimConfirmCard.tsx # Two-step claim confirmation card
         |   +-- Sidebar.tsx         # Conversation actions & sample prompt pills
         |   +-- SourcesBadge.tsx    # Expandable policy source citation pills
         |   +-- ToolCallBadge.tsx   # Transparent tool execution indicator pills
@@ -649,7 +854,7 @@ omnicare-financial/
 | **Rate Limiting**      | `slowapi`                        | Latest                   | Production rate limiting with user/IP key functions              |
 | **Frontend Framework** | `React`                          | `18.2.0`                 | Component-based interactive UI                                   |
 | **Routing**            | `react-router-dom`               | Latest                   | Client-side routing for SPA                                       |
-| **Build Tool**         | `Vite`                           | `^8.3.1`                 | Frontend build tooling and dev server                            |
+| **Build Tool**         | `Vite`                           | `^5.4.11`               | Frontend build tooling and dev server                            |
 | **Styling**            | `Tailwind CSS`                   | `3.3.0`                  | Clean enterprise dark-mode design system                         |
 | **Icons**              | `lucide-react`                   | `^0.300.0`               | Modern SVG iconography                                           |
 | **Markdown**           | `react-markdown`                 | `^9.0.0`                 | Rich text rendering with code syntax highlighting                |
@@ -780,6 +985,7 @@ The OmniCare assistant is powered by **Google ADK** (`LlmAgent`) and routed thro
     - `get_claim_status` → Owner-scoped Postgres claim lookup
     - `search_claims` → Natural language hybrid search over user's claims
     - `prepare_claim_submission` → Pydantic-validated claim preparation (returns confirmation_token)
+    - `get_procedure` → Loads a domain procedure playbook (coverage-review, claim-triage) from the procedures index
 7. The backend executes the requested tools, feeds results back to the model, and continues the loop until a final text response is produced.
 8. The final response, together with `sources` and `tool_calls`, is returned to the frontend.
 9. Conversation turn is persisted asynchronously to the database.
@@ -811,9 +1017,9 @@ The two-step `prepare` → `confirm` flow prevents unauthorized or accidental cl
 
 Network failures during chat requests can cause duplicate LLM calls, wasting tokens and producing inconsistent results. The optional `Idempotency-Key` header allows the frontend to safely retry failed requests without triggering duplicate agent execution. The cache is user-namespaced and TTL-based (5 minutes).
 
-### Why InMemorySessionService?
+### Why memory sessions by default, and PostgreSQL when it matters?
 
-For a prototype and moderate production loads, the `InMemorySessionService` provides excellent performance with zero external dependencies. Session state is bounded (max 500 sessions) with FIFO eviction to prevent unbounded memory growth. For multi-instance deployments, a Redis-backed session service can be swapped in with minimal code changes.
+The default is an in-process ADK session service: zero external dependencies, no round-trips, and on a single-process deployment nothing to gain from sharing. Session state is bounded (max 500 sessions) with FIFO eviction so memory cannot grow without limit. `SESSION_STORAGE=database` switches to the PostgreSQL-backed store (`agent_sessions` / `agent_session_events`), which is what makes a second replica able to continue a conversation and what makes a restart stop forgetting one — any request can be served by any instance, and the turns themselves are already persisted either way. Redis is not a session store here: it carries the idempotency cache and rate-limit counters, and nothing else. Note that flipping a running deployment from `memory` to `database` abandons the sessions that process was holding, once.
 
 ---
 

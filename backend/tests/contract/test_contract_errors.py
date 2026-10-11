@@ -313,8 +313,10 @@ def test_idor_claim_search_tool_is_owner_scoped(
 
     from app.domain.claims.tools import search_claims
 
-    results = asyncio.run(search_claims(query="kitchen flooding", n_results=5))
-    owners = {row.get("metadata", {}).get("owner_id") for row in results}
+    results = asyncio.run(search_claims(query="kitchen flooding", n_results=5))["results"]
 
-    assert user_b.user_id not in owners
-    assert user_a.user_id not in owners
+    # Only rows owned by the searching user can appear, so a row whose
+    # document matches user A's claim would mean the owner_id filter failed.
+    leaked = [row for row in results if "pipe burst" in row.get("document", "").lower()]
+
+    assert not leaked, "a differently-owned claim must never be retrievable"

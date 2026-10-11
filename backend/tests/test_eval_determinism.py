@@ -127,8 +127,18 @@ async def test_run_evaluation_is_deterministic_across_runs():
         settings=_settings(),
     )
 
+    # Latency is wall-clock by definition, so it is the one metric a rerun is
+    # allowed to differ on. It appears at two levels of granularity -- the
+    # aggregate average and one entry per sample -- and both have to be dropped
+    # before the two runs are comparable, or the assertion flaps on a slow run.
+    def _strip_latency(sample: dict) -> dict:
+        return {key: value for key, value in sample.items() if key != "latency_ms"}
+
     for metrics in (first.retrieval_metrics, second.retrieval_metrics):
         metrics.pop("avg_latency_ms", None)
+    for result in (first, second):
+        result.per_sample_results = [_strip_latency(sample) for sample in result.per_sample_results]
+
     assert first.retrieval_metrics == second.retrieval_metrics
     assert first.answer_metrics == second.answer_metrics
     assert first.per_sample_results == second.per_sample_results

@@ -28,7 +28,7 @@ module.exports = {
           "surface-secondary": "#F5F2EC",
           ink: "#24211E",
           "ink-secondary": "#6F6A63",
-          "ink-tertiary": "#858078",
+          "ink-tertiary": "#767068",
           border: "#E5E0D9",
           "border-strong": "#D7D0C7",
           success: "#2F7D5A",

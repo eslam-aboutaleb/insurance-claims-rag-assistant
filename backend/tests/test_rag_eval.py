@@ -6,10 +6,17 @@ endpoints stay here because they exercise the OmniCare API surface and its authe
 
   - GET  /api/v1/rag/dataset
   - POST /api/v1/rag/evaluate
+
+The evaluation endpoint is admin-only, and its authorization reads the role
+from the database rather than from the token, so the POST tests drive a real
+promoted admin account. The dataset endpoint stays open to any authenticated
+user and keeps using the mocked one.
 """
 
 from __future__ import annotations
 
+import asyncio
+import uuid
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -20,16 +27,51 @@ def _disable_rate_limiter():
     """Keep the process-wide SlowAPI limiter out of these tests.
 
     ``evaluate_rag`` is decorated with ``@limiter.limit("5/minute")`` and the
-    limiter's in-memory storage is a process-wide singleton. The fake test
-    token does not decode, so every request from this suite shares the single
-    ``ip:testclient`` bucket; without this fixture the suite's own requests
-    exhaust the 5/minute budget and later tests fail with 429.
+    limiter's in-memory storage is a process-wide singleton, so every request
+    from this suite shares the single ``ip:testclient`` bucket; without this
+    fixture the suite's own requests exhaust the 5/minute budget and later
+    tests fail with 429.
     """
     from app.main import app
 
     app.state.limiter.enabled = False
     yield
     app.state.limiter.enabled = True
+
+
+@pytest.fixture
+def admin_user(test_client):
+    """A real account promoted to admin, as the evaluation route now requires.
+
+    The evaluation endpoint is admin-only and its authorization reads the
+    role from the database rather than from the token, so the tests that
+    drive it need an account whose role was granted rather than a mocked
+    user id. Signup only mints a policyholder, so the row is promoted the
+    way an operator would.
+    """
+    from app.database import async_session_factory, engine
+    from app.models.user import User
+
+    username = f"eval_admin_{uuid.uuid4().hex[:8]}"
+    response = test_client.post(
+        "/api/v1/auth/signup", json={"username": username, "password": "TestPass123!"}
+    )
+    assert response.status_code == 201
+    body = response.json()
+
+    async def _promote() -> None:
+        await engine.dispose()
+        try:
+            async with async_session_factory() as session:
+                user = await session.get(User, uuid.UUID(body["user_id"]))
+                assert user is not None
+                user.role = "admin"
+                await session.commit()
+        finally:
+            await engine.dispose()
+
+    asyncio.run(_promote())
+    return {"Authorization": f"Bearer {body['access_token']}"}
 
 
 def test_api_list_eval_dataset(test_client, mock_current_user):
@@ -56,7 +98,7 @@ def test_api_list_eval_dataset(test_client, mock_current_user):
     assert bad_resp.status_code == 422
 
 
-def test_api_evaluate_rag_endpoint(test_client, mock_current_user):
+def test_api_evaluate_rag_endpoint(test_client, admin_user):
     mock_hybrid_results = [
         {
             "document": "Water damage caused by sudden pipe bursts is covered up to $25,000.",
@@ -81,7 +123,7 @@ def test_api_evaluate_rag_endpoint(test_client, mock_current_user):
         response = test_client.post(
             "/api/v1/rag/evaluate",
             json=payload,
-            headers=mock_current_user,
+            headers=admin_user,
         )
         assert response.status_code == 200
         data = response.json()
@@ -91,7 +133,7 @@ def test_api_evaluate_rag_endpoint(test_client, mock_current_user):
         assert data["duration_seconds"] >= 0
 
 
-def test_api_evaluate_rag_endpoint_retrieval_only(test_client, mock_current_user):
+def test_api_evaluate_rag_endpoint_retrieval_only(test_client, admin_user):
     """The retrieval-only mode omits answer metrics from the response."""
     mock_hybrid_results = [
         {
@@ -118,7 +160,7 @@ def test_api_evaluate_rag_endpoint_retrieval_only(test_client, mock_current_user
         response = test_client.post(
             "/api/v1/rag/evaluate",
             json=payload,
-            headers=mock_current_user,
+            headers=admin_user,
         )
         assert response.status_code == 200
         data = response.json()
@@ -126,7 +168,7 @@ def test_api_evaluate_rag_endpoint_retrieval_only(test_client, mock_current_user
         assert data["retrieval_metrics"]["total_queries"] > 0
 
 
-def test_api_evaluate_rag_endpoint_invalid_category(test_client, mock_current_user):
+def test_api_evaluate_rag_endpoint_invalid_category(test_client, admin_user):
     """An unknown category is rejected with a 422 listing valid values."""
     payload = {
         "mode": "retrieval-only",
@@ -136,14 +178,14 @@ def test_api_evaluate_rag_endpoint_invalid_category(test_client, mock_current_us
     response = test_client.post(
         "/api/v1/rag/evaluate",
         json=payload,
-        headers=mock_current_user,
+        headers=admin_user,
     )
     assert response.status_code == 422
     detail = response.json()["error"]["message"]
     assert "Invalid category" in detail
 
 
-def test_api_evaluate_rag_endpoint_config_round_trip(test_client, mock_current_user):
+def test_api_evaluate_rag_endpoint_config_round_trip(test_client, admin_user):
     """The request's mode/judge/filters are echoed back in the config."""
     mock_hybrid_results = [
         {
@@ -170,7 +212,7 @@ def test_api_evaluate_rag_endpoint_config_round_trip(test_client, mock_current_u
         response = test_client.post(
             "/api/v1/rag/evaluate",
             json=payload,
-            headers=mock_current_user,
+            headers=admin_user,
         )
         assert response.status_code == 200
         config = response.json()["config"]

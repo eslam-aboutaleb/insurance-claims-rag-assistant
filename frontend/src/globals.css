@@ -93,9 +93,28 @@
   .prose h3 {
     @apply text-base;
   }
-  .prose ul,
+  /*
+   * Tailwind's preflight resets list markers, so prose lists have to restore
+   * them explicitly. Nesting swaps in a weaker marker per level, which is the
+   * convention readers expect when a bullet contains a sub-list.
+   */
+  .prose ul {
+    @apply list-disc pl-5;
+  }
   .prose ol {
-    @apply pl-5;
+    @apply list-decimal pl-5;
+  }
+  .prose ul ul,
+  .prose ol ol,
+  .prose ul ol,
+  .prose ol ul {
+    @apply [list-style-type:circle];
+  }
+  .prose ul ul ul,
+  .prose ol ol ol,
+  .prose ul ol ul,
+  .prose ol ul ol {
+    @apply [list-style-type:square];
   }
   .prose li {
     @apply mb-1;
@@ -115,5 +134,24 @@
   }
   .prose th {
     @apply bg-insurance-bg font-medium;
+  }
+}
+
+/*
+ * Outside every layer so these rules sit after the utilities: a same-
+ * specificity class rule loses to a later one, and the animations this
+ * cancels come from Tailwind's own utilities.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .message-enter {
+    animation: none;
+  }
+  .animate-typing-dot,
+  .animate-fade-in,
+  .animate-pulse,
+  .animate-slide-up,
+  .animate-scale-in,
+  .animate-shimmer {
+    animation: none;
   }
 }

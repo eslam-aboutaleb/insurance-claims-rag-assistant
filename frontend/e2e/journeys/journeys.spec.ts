@@ -398,11 +398,11 @@ test("Journey 7: a second user cannot read another user's conversation @journey"
   recording.record("cross_user_conversation_access", "rejected with 404");
 });
 
-test("Journey 8: claim submission prepares a token and has no confirm UI (baseline) @journey", async ({
+test("Journey 8: a prepared claim is reviewed and confirmed from the chat UI @journey", async ({
   recording,
   request,
 }) => {
-  const { username } = await signupViaApi(request);
+  const { username, token } = await signupViaApi(request);
   const { page } = recording;
   await signInViaUi(page, username);
 
@@ -415,19 +415,46 @@ test("Journey 8: claim submission prepares a token and has no confirm UI (baseli
   await sendMessage(page, "A pipe burst flooded the kitchen yesterday");
   await waitForResponse(page);
 
-  // The agent prepares the submission and asks the user to confirm in the UI.
+  // The agent prepares the submission and hands the confirmation to the UI.
   await expect(page.getByTestId("message-list")).toContainText(/confirm/i, {
     timeout: 120_000,
   });
 
-  // Recorded baseline (plan A3, journey 8): no claim-confirmation UI exists.
-  // The user must confirm through the API; if a confirm UI is added later,
-  // extend this journey instead of silently changing the baseline.
-  const confirmControls = page.getByRole("button", {
-    name: /confirm (claim|submission)/i,
-  });
-  const confirmCount = await confirmControls.count();
-  recording.record("claim_confirmation_ui_controls", confirmCount);
-  recording.record("claim_confirmation_ui_exists", confirmCount > 0);
-  expect(confirmCount).toBe(0);
+  // The confirmation card rides on the tool trace of the turn that prepared it.
+  const toolDetails = page.getByRole("button", { name: "Tool details" }).last();
+  await expect(toolDetails).toBeVisible();
+  await toolDetails.click();
+
+  const card = page.getByTestId("claim-confirm-card");
+  await expect(card).toBeVisible({ timeout: 30_000 });
+  await expect(card).toContainText("POL-1092");
+  await expect(card).toContainText("$3,500");
+  await expect(card).toContainText("A pipe burst flooded the kitchen");
+  recording.record("claim_confirmation_ui_exists", true);
+
+  await page.getByTestId("confirm-claim-button").click();
+
+  // The receipt is driven by the confirm response, so the claim id is the proof
+  // the two-step flow completed rather than echoing the prepared values back.
+  const receipt = page.getByTestId("claim-receipt");
+  await expect(receipt).toBeVisible({ timeout: 60_000 });
+  const claimId = (await receipt.textContent())?.match(/CLM-[A-Z0-9]+/)?.[0];
+  expect(claimId).toBeTruthy();
+  recording.record("confirmed_claim_id", claimId);
+
+  // The claim is now readable through the claims API the receipt links to.
+  await expect
+    .poll(
+      async () => {
+        const claims = await request.get(`${API_URL}/api/v1/claims`, {
+          headers: await authedHeaders(token),
+        });
+        if (claims.status() !== 200) return false;
+        const filed = (await claims.json()).claims as { claim_id: string }[];
+        return filed.some((claim) => claim.claim_id === claimId);
+      },
+      { timeout: 30_000 },
+    )
+    .toBe(true);
+  recording.record("claim_filed", true);
 });

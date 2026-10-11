@@ -85,6 +85,16 @@ class Settings(BaseSettings):
             "abandoned by a dead worker and reclaimed to 'pending'."
         ),
     )
+    notification_drain_interval_seconds: float = Field(
+        default=5.0,
+        gt=0.1,
+        description=("Idle sleep of the notification drainer between empty passes."),
+    )
+    notification_drain_batch_size: int = Field(
+        default=10,
+        gt=0,
+        description="Number of notification jobs the drainer delivers per pass.",
+    )
     worker_id: str = Field(
         default_factory=lambda: f"{socket.gethostname()}-{os.getpid()}",
         description=(
@@ -154,6 +164,165 @@ class Settings(BaseSettings):
     database_url: str = Field(
         description="SQLAlchemy async PostgreSQL database URL",
     )
+
+    # Observability Configuration
+    observability_enabled: bool = Field(
+        default=True,
+        description=(
+            "Master switch for the observability hooks: the request-id correlation "
+            "middleware, structured log records, per-tool latency instrumentation, and "
+            "the telemetry reported by GET /api/v1/health/detailed. Disabling it removes "
+            "the hooks themselves rather than only silencing their output, so a "
+            "deployment that has chosen a different observability stack pays nothing."
+        ),
+    )
+    llm_cost_tracking_enabled: bool = Field(
+        default=True,
+        description=(
+            "Whether the LiteLLM callback that records tokens, dollar cost, and latency "
+            "for every model call is registered on startup. The per-call figures are the "
+            "unit economics of the product: without them there is no way to see what a "
+            "conversation costs. Disable only when an external tracer already collects "
+            "the same data."
+        ),
+    )
+    log_format: Literal["json", "text"] = Field(
+        default="json",
+        description=(
+            "Log record encoding. 'json' writes one JSON object per line with the "
+            "correlation id as a field, which is what a log aggregator expects and what "
+            "makes a single request traceable across services; 'text' keeps the original "
+            "single-line layout for reading logs by eye during development."
+        ),
+    )
+
+    # Distributed State
+    # Redis is the shared store that makes two process-local caches -- the idempotency
+    # cache and the rate-limit counters -- correct when more than one replica serves
+    # traffic. Every setting below falls back to the original in-process behaviour when
+    # Redis is not configured, so local development and the test suite are unaffected.
+    redis_url: str = Field(
+        default="",
+        description=(
+            "Redis connection URI used by the distributed stores, for example "
+            "``redis://redis:6379/0``. An empty value means no Redis is configured and "
+            "every store below silently keeps its in-process behaviour; set it together "
+            "with IDEMPOTENCY_STORAGE and/or RATE_LIMIT_STORAGE to make those stores "
+            "global across replicas."
+        ),
+    )
+    redis_connect_timeout_seconds: float = Field(
+        default=1.0,
+        gt=0,
+        description=(
+            "Seconds to wait for a Redis TCP connection before giving up. Kept short "
+            "because a Redis that is not answering is treated as 'unavailable' and the "
+            "store falls back to in-process state, so a long timeout would only stall "
+            "requests."
+        ),
+    )
+    redis_socket_timeout_seconds: float = Field(
+        default=2.0,
+        gt=0,
+        description=(
+            "Seconds to wait for a Redis reply before the command is abandoned and the "
+            "store falls back to in-process state."
+        ),
+    )
+    idempotency_storage: Literal["memory", "redis"] = Field(
+        default="memory",
+        description=(
+            "Where successful chat responses are cached for replay. 'memory' keeps the "
+            "cache in the process (correct for uvicorn --workers 1, which is the default "
+            "here); 'redis' shares one cache across every replica so a retry replays "
+            "regardless of which instance receives it. 'redis' without a configured "
+            "REDIS_URL, and any Redis outage, degrade to 'memory' rather than failing "
+            "the request."
+        ),
+    )
+    rate_limit_storage: Literal["memory", "redis"] = Field(
+        default="memory",
+        description=(
+            "Where SlowAPI keeps rate-limit counters. 'memory' counts per process, so N "
+            "replicas allow N x the configured quota; 'redis' makes the 20/minute chat "
+            "limit global. 'redis' without a configured REDIS_URL, and any Redis outage, "
+            "degrade to 'memory' -- the limiter fails open so a Redis problem cannot take "
+            "the chat endpoints down with it."
+        ),
+    )
+
+    # Session Storage
+    session_storage: Literal["memory", "database"] = Field(
+        default="memory",
+        description=(
+            "Where the ADK agent keeps conversation sessions. 'memory' keeps them in the "
+            "process and loses them on restart; 'database' stores them in the "
+            "``agent_sessions`` and ``agent_session_events`` tables of the same PostgreSQL "
+            "database, so any replica can continue any conversation and a restart no "
+            "longer forgets an in-flight discussion. The default is 'memory' because a "
+            "single-process deployment gains nothing from the database round-trips. "
+            "Switching a running deployment from 'memory' to 'database' abandons the "
+            "sessions the process was holding: a one-time, acceptable loss, since the "
+            "turns themselves are already persisted in ``conversation_messages``."
+        ),
+    )
+    session_history_turns: int = Field(
+        default=20,
+        gt=0,
+        description=(
+            "Number of most-recent persisted conversation turns replayed into the model's "
+            "history when the ADK session starts empty (a fresh session, a new replica, "
+            "or the first turn after the storage swap). Older turns are covered by the "
+            "compaction summary instead of being replayed in full."
+        ),
+    )
+    session_history_compaction_turns: int = Field(
+        default=60,
+        gt=0,
+        description=(
+            "Number of older turns folded into the single compaction summary that precedes "
+            "the replayed history, so a long conversation stays inside the model's context "
+            "window without discarding that it happened."
+        ),
+    )
+
+    # Agent prompt and sampling
+    # The prompt the agent runs with lives with the agent's behaviour in
+    # ``app.agent.prompts``; these settings override it, and tune sampling, for a
+    # deployment without a code change. Both sampling knobs default to unset so
+    # the model provider's own defaults apply unless asked otherwise.
+    system_prompt: str = Field(
+        default="",
+        description=(
+            "System instruction the agent runs with. Empty runs the reviewed prompt "
+            "from app.agent.prompts, which is the version that belongs to the agent; "
+            "set this to override it for a deployment."
+        ),
+    )
+    llm_temperature: float | None = Field(
+        default=None,
+        description=(
+            "Sampling temperature for the agent's model calls. Unset (the default) "
+            "leaves the provider's own default in place."
+        ),
+    )
+    llm_max_tokens: int | None = Field(
+        default=None,
+        gt=0,
+        description=(
+            "Maximum tokens per agent model call. Unset (the default) leaves the "
+            "provider's own default in place."
+        ),
+    )
+
+    @property
+    def redis_enabled(self) -> bool:
+        """Whether a Redis URI is configured.
+
+        Shortcut for callers that should not re-parse the URI, and the single guard that
+        keeps a store from trying to connect when no Redis was deployed at all.
+        """
+        return bool(self.redis_url.strip())
 
     @field_validator("cors_origins", mode="before")
     @classmethod

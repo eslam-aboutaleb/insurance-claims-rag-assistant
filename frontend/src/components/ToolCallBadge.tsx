@@ -2,24 +2,70 @@
  * ToolCallBadge component.
  *
  * Renders a transparent view of the AI agent's tool invocations during a
- * single assistant message. For standard tools (e.g. ``query_policy``) it
- * shows an expandable details element with arguments and raw JSON result.
- * For richer tools (``get_claim_status``, ``submit_claim``) it renders
- * a purpose-built status card or claim receipt for readability.
+ * single assistant message. For corpus tools (e.g. ``query_policy``) it shows
+ * an expandable details element with arguments and raw JSON result. For
+ * ``get_claim_status`` it renders a purpose-built status card, and for
+ * ``prepare_claim_submission`` the confirmation card that turns a staged claim
+ * into a filed one, because both have a known shape and raw JSON would only
+ * obscure them.
  *
  * Design rationale:
  *   - Tool transparency builds user trust by showing exactly what the agent
  *     did to arrive at its answer.
- *   - Rich UIs for claim tools reduce cognitive load compared to raw JSON.
+ *   - A rich card for the claim lookup reduces cognitive load compared to raw
+ *     JSON, and lets the card show only the fields the backend returns.
  *   - The details/summary pattern keeps the default view compact.
+ *   - A prepared claim is a decision the user has to make, so its card is
+ *     rendered wherever the claim's tool call appears rather than being folded
+ *     into the generic trace.
  */
 
-import { ToolCall } from "@/types/chat";
-import { ChevronDown, CheckCircle2, AlertCircle } from "lucide-react";
+import {
+  GET_CLAIM_STATUS_TOOL,
+  PREPARE_CLAIM_SUBMISSION_TOOL,
+  asClaimCancellationNote,
+  asClaimConfirmationReceipt,
+  asPendingClaimConfirmation,
+} from "@/lib/api";
+import {
+  ClaimCancellationNotice,
+  ClaimConfirmCard,
+  ClaimReceipt,
+  claimConfirmationTarget,
+} from "./ClaimConfirmCard";
+import { ClaimStatusResult, ToolCall } from "@/types/chat";
+import { ChevronDown, AlertCircle } from "lucide-react";
 
 interface ToolCallBadgeProps {
   /** Array of tool calls made during the generation of an assistant message. */
   toolCalls: ToolCall[];
+}
+
+/** Claim statuses the backend can produce, with the colour each one carries. */
+const STATUS_COLORS: Record<string, string> = {
+  Submitted: "bg-insurance-info",
+  "Under Review": "bg-insurance-warning",
+  Approved: "bg-insurance-success",
+  Paid: "bg-insurance-success",
+  Denied: "bg-insurance-error",
+  Closed: "bg-insurance-ink-tertiary",
+};
+
+/** Colour for a status that is not in the map, so an unknown value never renders blank. */
+const FALLBACK_STATUS_COLOR = "bg-insurance-ink-tertiary";
+
+/**
+ * Amounts cross the wire as either a JSON number or a decimal string, and a
+ * failed lookup omits the field entirely.
+ */
+function formatAmount(amount: ClaimStatusResult["amount"]): string {
+  const numeric = typeof amount === "string" ? Number(amount) : amount;
+  if (typeof numeric !== "number" || !Number.isFinite(numeric)) return "—";
+  return `$${numeric.toLocaleString()}`;
+}
+
+function isClaimStatusResult(value: unknown): value is ClaimStatusResult {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 export default function ToolCallBadge({ toolCalls }: ToolCallBadgeProps) {
@@ -34,7 +80,7 @@ export default function ToolCallBadge({ toolCalls }: ToolCallBadgeProps) {
   );
 }
 
-function StatusCard({ result }: { result: any }) {
+function StatusCard({ result }: { result: ClaimStatusResult }) {
   if (result?.error) {
     return (
       <div className="bg-insurance-error/10 border border-insurance-error/20 rounded-xl p-4 mt-2">
@@ -47,17 +93,7 @@ function StatusCard({ result }: { result: any }) {
     );
   }
 
-  if (!result || typeof result !== "object") return null;
-
-  const statusColors: Record<string, string> = {
-    Filed: "bg-insurance-info",
-    "Under Review": "bg-insurance-warning",
-    Approved: "bg-insurance-success",
-    Paid: "bg-insurance-success",
-    Denied: "bg-insurance-error",
-  };
-
-  const color = statusColors[result.status] || "bg-insurance-ink-tertiary";
+  const color = STATUS_COLORS[result.status ?? ""] ?? FALLBACK_STATUS_COLOR;
 
   return (
     <div className="bg-insurance-surface border border-insurance-border rounded-xl p-5 mt-2 shadow-subtle">
@@ -72,10 +108,11 @@ function StatusCard({ result }: { result: any }) {
         </div>
         <div
           className={`flex items-center space-x-1.5 px-3 py-1 rounded-full bg-insurance-surface-secondary border border-insurance-border`}
+          data-testid="claim-status-pill"
         >
           <div className={`w-2 h-2 rounded-full ${color} animate-pulse`}></div>
           <span className="text-sm font-medium text-insurance-ink">
-            {result.status}
+            {result.status ?? "Unknown"}
           </span>
         </div>
       </div>
@@ -83,86 +120,78 @@ function StatusCard({ result }: { result: any }) {
       <div className="grid grid-cols-2 gap-4 text-sm">
         <div>
           <p className="text-insurance-ink-tertiary">Type</p>
-          <p className="text-insurance-ink font-medium">{result.claim_type}</p>
+          <p className="text-insurance-ink font-medium">
+            {result.claim_type ?? "—"}
+          </p>
         </div>
         <div>
           <p className="text-insurance-ink-tertiary">Amount</p>
           <p className="text-insurance-ink font-medium">
-            ${(result.amount || 0).toLocaleString()}
+            {formatAmount(result.amount)}
           </p>
         </div>
         <div className="col-span-2">
-          <p className="text-insurance-ink-tertiary">Filed On</p>
-          <p className="text-insurance-ink">
-            {new Date(result.filing_date).toLocaleDateString()}
+          <p className="text-insurance-ink-tertiary">Policy Number</p>
+          <p className="text-insurance-ink font-medium">
+            {result.policy_number ?? "—"}
           </p>
         </div>
+        {result.citation && (
+          <p className="col-span-2 text-xs text-insurance-ink-tertiary border-t border-insurance-border pt-3">
+            {result.citation}
+          </p>
+        )}
       </div>
     </div>
   );
 }
 
-function ReceiptCard({ result }: { result: any }) {
-  if (result?.success === false) {
+/**
+ * The confirmation card, the receipt, or the cancellation note for one prepared
+ * claim.
+ *
+ * A prepare that failed validation never produced a token, so it is left in the
+ * generic trace where its error is still visible.
+ */
+function PreparedClaimCall({ call }: { call: ToolCall }) {
+  const receipt = asClaimConfirmationReceipt(call.result);
+  if (receipt) return <ClaimReceipt receipt={receipt} />;
+
+  const note = asClaimCancellationNote(call.result);
+  if (note) return <ClaimCancellationNotice note={note} />;
+
+  const pending = asPendingClaimConfirmation(call.result);
+  if (pending) {
     return (
-      <div className="bg-insurance-error/10 border border-insurance-error/20 rounded-xl p-4 mt-2 text-sm text-insurance-error">
-        <AlertCircle className="w-5 h-5 inline mr-2" />
-        Failed to submit claim.
-      </div>
+      <ClaimConfirmCard
+        claimData={pending.claimData}
+        token={pending.token}
+        expiresAt={pending.expiresAt}
+        onConfirmed={(outcome) =>
+          claimConfirmationTarget(pending.token)?.recordConfirmation(outcome)
+        }
+        onCancelled={(outcome) =>
+          claimConfirmationTarget(pending.token)?.recordCancellation(outcome)
+        }
+      />
     );
   }
 
-  return (
-    <div className="bg-insurance-success/10 border border-insurance-success/20 rounded-xl p-5 mt-2 shadow-subtle relative overflow-hidden">
-      <div className="absolute top-0 right-0 p-4 opacity-10">
-        <CheckCircle2 className="w-24 h-24 text-insurance-success" />
-      </div>
-      <div className="flex items-center space-x-3 mb-4 relative z-10">
-        <div className="w-10 h-10 bg-insurance-success/20 rounded-full flex items-center justify-center text-insurance-success">
-          <CheckCircle2 className="w-6 h-6" />
-        </div>
-        <div>
-          <h3 className="text-lg font-medium text-insurance-ink">
-            Claim Submitted Successfully
-          </h3>
-          <p className="text-sm text-insurance-ink-secondary">
-            We&apos;ve received your information
-          </p>
-        </div>
-      </div>
-
-      <div className="bg-insurance-surface/70 rounded-lg p-4 relative z-10 border border-insurance-border">
-        <p className="text-xs text-insurance-ink-tertiary uppercase tracking-wider mb-1">
-          Your Claim ID
-        </p>
-        <p className="text-xl font-mono text-insurance-ink mb-4">
-          {result.claim_id}
-        </p>
-        <p className="text-sm text-insurance-ink-tertiary">
-          You can use this ID to check the status of your claim at any time.
-        </p>
-      </div>
-    </div>
-  );
+  return <GenericToolTrace call={call} />;
 }
 
 function ToolCallItem({ call }: { call: ToolCall }) {
-  let isRichUI = false;
-
-  if (
-    call.result &&
-    (call.name === "get_claim_status" || call.name === "submit_claim")
-  ) {
-    isRichUI = true;
+  if (call.name === GET_CLAIM_STATUS_TOOL && isClaimStatusResult(call.result)) {
+    return <StatusCard result={call.result} />;
   }
-
-  if (isRichUI) {
-    if (call.name === "get_claim_status")
-      return <StatusCard result={call.result} />;
-    if (call.name === "submit_claim")
-      return <ReceiptCard result={call.result} />;
+  if (call.name === PREPARE_CLAIM_SUBMISSION_TOOL) {
+    return <PreparedClaimCall call={call} />;
   }
+  return <GenericToolTrace call={call} />;
+}
 
+/** The raw arguments and result of a tool, for anything without a purpose card. */
+function GenericToolTrace({ call }: { call: ToolCall }) {
   const color =
     call.name === "query_policy"
       ? "bg-insurance-info/10 border-insurance-info/20 text-insurance-info"

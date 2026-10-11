@@ -95,12 +95,18 @@ def test_rolled_back_claim_leaves_no_orphan_job() -> None:
     This is the defect the invariant prevents: an enqueue on its own session commits
     the job, the claim transaction then fails, and the worker later upserts an index
     entry for a claim that does not exist.
+
+    The owner is registered because ``embedding_jobs.owner_id`` carries a foreign key.
+    Passing a random one here would make the *flush* fail rather than the rollback,
+    and the assertion below would then hold for the wrong reason: an enqueue that
+    never reached the database proves nothing about what a rollback discards.
     """
     claim_uuid = uuid.uuid4()
+    owner_id = _register_user()
 
     async def _stage_then_rollback() -> None:
         async with async_session_factory() as session:
-            await enqueue_embedding_job(session=session, **_job_kwargs(claim_uuid, uuid.uuid4()))  # type: ignore[arg-type]
+            await enqueue_embedding_job(session=session, **_job_kwargs(claim_uuid, owner_id))  # type: ignore[arg-type]
             await session.rollback()
 
     asyncio.run(_stage_then_rollback())

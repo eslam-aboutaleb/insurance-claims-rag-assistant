@@ -13,6 +13,7 @@ import json
 import pytest
 from fastapi.testclient import TestClient
 
+from app.agent.conversation_store import SavedMessageIds
 from tests.contract.conftest import SeededUser, compare_to_golden
 from tests.contract.llm_double import ScriptedToolCall, ScriptedTurn
 
@@ -220,7 +221,15 @@ def test_chat_stream_emits_terminal_event_when_model_stream_fails(
         body = "".join(response.iter_text())
 
     events = _sse_events(body)
-    assert events[-1]["type"] == "response_complete"
+    types = [event.get("type") for event in events]
+
+    # The failure is announced by its own frame, and the terminal frame says the
+    # turn stopped: together they let a client tell a truncated answer from a
+    # complete one instead of silently rendering an empty response.
+    assert "error" in types, f"no error frame emitted, got {types}"
+    assert types[-1] == "response_complete"
+    assert types.index("error") < len(types) - 1
+    assert events[-1]["status"] == "error"
     assert events[-1]["sources"] == []
 
 
@@ -239,12 +248,15 @@ def test_chat_stream_empty_message_is_422(contract_client: TestClient, user_a: S
 def _silence_conversation_persistence(monkeypatch: pytest.MonkeyPatch) -> None:
     """Keep contract scenarios on the HTTP surface rather than on side-effect writes.
 
-    Chat endpoints persist the turn with ``asyncio.create_task``, which outlives the
-    request and would race the per-test database reset.
+    The chat endpoints await the save inside the request, so a real write would
+    land inside the request that a golden compares. Replacing it with the
+    no-save ``SavedMessageIds`` keeps both the return type the production code
+    already coerces and the ids absent from the frozen envelope, so the goldens
+    can pin the new ``message_id`` fields as null rather than drifting on them.
     """
 
     async def _noop(*_args, **_kwargs):
-        return None
+        return SavedMessageIds()
 
     for module in ("app.api.v1.chat", "app.api.v1.chat_stream"):
         monkeypatch.setattr(f"{module}.save_conversation_turn", _noop)

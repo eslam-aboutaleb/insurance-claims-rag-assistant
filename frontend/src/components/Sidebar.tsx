@@ -18,7 +18,7 @@
 import { Plus, Shield, LogOut, MessageSquare } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { getConversations } from "@/lib/api";
-import { ConversationMeta } from "@/types/chat";
+import { ConversationMeta, formatRelativeTimestamp } from "@/types/chat";
 import { useAuth } from "@/context/AuthContext";
 
 interface SidebarProps {
@@ -32,20 +32,6 @@ interface SidebarProps {
   refreshTrigger?: number;
   /** The currently active conversation ID, if any. */
   activeConversationId?: string | null;
-}
-
-function formatRelativeTime(dateString: string): string {
-  const date = new Date(dateString);
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffMins = Math.floor(diffMs / 60000);
-  if (diffMins < 1) return "Just now";
-  if (diffMins < 60) return `${diffMins}m ago`;
-  const diffHours = Math.floor(diffMins / 60);
-  if (diffHours < 24) return `${diffHours}h ago`;
-  const diffDays = Math.floor(diffHours / 24);
-  if (diffDays < 7) return `${diffDays}d ago`;
-  return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
 export default function Sidebar({
@@ -64,6 +50,9 @@ export default function Sidebar({
   });
 
   const chats: ConversationMeta[] = data?.conversations || [];
+  // One clock per render keeps every relative label in the list measured from
+  // the same instant.
+  const now = new Date();
 
   return (
     <div
@@ -155,7 +144,7 @@ export default function Sidebar({
               <div className="flex-1 min-w-0">
                 <div className="truncate">{chat.title}</div>
                 <div className="text-[11px] text-insurance-ink-tertiary truncate">
-                  {formatRelativeTime(chat.updated_at)}
+                  {formatRelativeTimestamp(new Date(chat.updated_at), now)}
                 </div>
               </div>
             </button>

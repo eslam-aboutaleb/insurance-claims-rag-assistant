@@ -17,6 +17,13 @@ Idempotency:
   their message text slightly.
 
   Cached responses are indicated by the ``X-Idempotent-Replayed: true`` header.
+
+Message ids:
+  The turn is persisted before the answer is returned, so ``ChatResponse``
+  carries the backend-assigned ``message_id`` (the assistant answer) and
+  ``user_message_id``. A client adopts these in place of any id it generated
+  locally: the feedback endpoint authorises on the persisted id, so rating a
+  locally-generated id is refused with a 403.
 """
 
 import logging
@@ -25,7 +32,6 @@ from typing import Any
 import litellm
 from fastapi import (
     APIRouter,
-    BackgroundTasks,
     Depends,
     Header,
     HTTPException,
@@ -35,7 +41,7 @@ from fastapi import (
 )
 
 from app.agent.agent import reset_user_session, run_agent
-from app.agent.conversation_store import save_conversation_turn
+from app.agent.conversation_store import SavedMessageIds, save_conversation_turn
 from app.auth import get_current_user
 from app.config import Settings, get_settings
 from app.idempotency import idempotent_endpoint
@@ -87,7 +93,6 @@ async def chat(  # noqa: PLR0913, PLR0917
     payload: ChatRequest,
     request: Request,
     response: Response,
-    background_tasks: BackgroundTasks,
     current_user_id: str = Depends(get_current_user),
     current_settings: Settings = Depends(get_settings),
     idempotency_key: str | None = Header(
@@ -165,24 +170,33 @@ async def chat(  # noqa: PLR0913, PLR0917
             detail=error_detail,
         ) from e
 
+    # Persist before returning so the backend-assigned message ids can be
+    # echoed back. The id a client rates must match the row the database
+    # wrote -- a client-generated id matches nothing and the feedback endpoint
+    # refuses it with a 403 -- so the turn is committed synchronously here
+    # rather than dispatched after the response. The save swallows its own
+    # errors and reports no id on failure, which surfaces as null fields while
+    # the answer is still returned. save_conversation_turn is idempotent with
+    # the request cache: a replay returns the cached ids, which still point at
+    # the rows the first call wrote.
+    saved_ids = (
+        await save_conversation_turn(
+            user_id=effective_user_id,
+            session_id=result.get("session_id", ""),
+            message=payload.message,
+            response_text=result["response"],
+            sources=result.get("sources", []),
+            tool_calls=result.get("tool_calls", []),
+        )
+        or SavedMessageIds()
+    )
+
     chat_response = ChatResponse(
         response=result["response"],
         sources=result.get("sources", []),
         tool_calls=result.get("tool_calls", []),
-    )
-
-    # Persist the conversation turn after the response is sent. BackgroundTasks
-    # are part of the response lifecycle: they run once the response has been
-    # delivered, so persistence can never race with the next request (or a
-    # test's database reset) the way a detached asyncio.create_task can.
-    background_tasks.add_task(
-        save_conversation_turn,
-        user_id=effective_user_id,
-        session_id=result.get("session_id", ""),
-        message=payload.message,
-        response_text=result["response"],
-        sources=result.get("sources", []),
-        tool_calls=result.get("tool_calls", []),
+        message_id=saved_ids.assistant_message_id,
+        user_message_id=saved_ids.user_message_id,
     )
 
     return chat_response

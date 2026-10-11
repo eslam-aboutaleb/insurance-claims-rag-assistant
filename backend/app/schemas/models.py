@@ -17,7 +17,7 @@ the database.
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Any, Literal
 
@@ -77,6 +77,16 @@ class ChatResponse(BaseModel):
             in the response.
         tool_calls: List of tools invoked with arguments and execution results,
             providing an auditable trace of the agent's reasoning path.
+        message_id: The backend-assigned id of the persisted assistant answer.
+            This is the id the feedback endpoint accepts, so a client must prefer
+            it over any id it generated for itself: the two never coincide, and
+            a client-generated id is refused with a 403. It is ``None`` when the
+            turn could not be persisted.
+        user_message_id: The backend-assigned id of the persisted user message,
+            or ``None`` when the turn was not persisted.
+
+    The two ``*_message_id`` fields are additive so the response stays
+    backward compatible: an older client that ignores them still works.
     """
 
     response: str = Field(..., description="Agent's synthesized text response")
@@ -87,6 +97,20 @@ class ChatResponse(BaseModel):
     tool_calls: list[dict[str, Any]] = Field(
         default_factory=list,
         description="List of tools invoked with arguments and execution results",
+    )
+    message_id: str | None = Field(
+        default=None,
+        description=(
+            "Backend-assigned id of the persisted assistant answer; the id the "
+            "feedback endpoint accepts. None when the turn was not persisted."
+        ),
+    )
+    user_message_id: str | None = Field(
+        default=None,
+        description=(
+            "Backend-assigned id of the persisted user message. None when the "
+            "turn was not persisted."
+        ),
     )
 
     model_config = ConfigDict(
@@ -450,3 +474,332 @@ class RagEvalResponse(BaseModel):
     )
     summary: str = Field(..., description="Formatted summary report")
     duration_seconds: float = Field(..., description="Total execution duration in seconds")
+
+
+# --- Streaming Event Schemas ----------------------------------------------
+
+
+class StreamTextDelta(BaseModel):
+    """SSE event carrying one fragment of the assistant's streaming answer.
+
+    Attributes:
+        type: Event discriminator, always ``"text_delta"``.
+        content: The text fragment to append to the answer being rendered.
+    """
+
+    type: Literal["text_delta"] = "text_delta"
+    content: str = Field(..., description="Incremental fragment of the assistant answer")
+
+
+class StreamToolCall(BaseModel):
+    """SSE event announcing that the agent invoked a tool.
+
+    Attributes:
+        type: Event discriminator, always ``"tool_call"``.
+        tool: The registered name of the tool the agent invoked.
+        arguments: The arguments the agent passed to the tool.
+    """
+
+    type: Literal["tool_call"] = "tool_call"
+    tool: str = Field(..., description="Registered name of the tool the agent invoked")
+    arguments: dict[str, Any] = Field(
+        default_factory=dict, description="Arguments the agent passed to the tool"
+    )
+
+
+class StreamToolResult(BaseModel):
+    """SSE event carrying the value a tool returned.
+
+    Attributes:
+        type: Event discriminator, always ``"tool_result"``.
+        tool: The registered name of the tool that returned.
+        result: The tool's return value.
+    """
+
+    type: Literal["tool_result"] = "tool_result"
+    tool: str = Field(..., description="Registered name of the tool that returned")
+    result: dict[str, Any] = Field(
+        default_factory=dict, description="Return value of the tool invocation"
+    )
+
+
+class StreamToolError(BaseModel):
+    """SSE event carrying a tool failure reported through the model loop.
+
+    Attributes:
+        type: Event discriminator, always ``"tool_error"``.
+        tool: The registered name of the tool that failed.
+        error: Human-readable failure description returned by the tool.
+    """
+
+    type: Literal["tool_error"] = "tool_error"
+    tool: str = Field(..., description="Registered name of the tool that failed")
+    error: str = Field(..., description="Failure description reported by the tool")
+
+
+class StreamError(BaseModel):
+    """SSE event reporting that the model stream failed mid-response.
+
+    An ``error`` event is never terminal: the stream still closes with
+    ``StreamResponseComplete`` so the client always receives a marker.
+
+    Attributes:
+        type: Event discriminator, always ``"error"``.
+        message: User-facing description of the failure. Never carries
+            internal exception detail.
+        code: Machine-readable failure code, for example ``"stream_failed"``.
+    """
+
+    type: Literal["error"] = "error"
+    message: str = Field(..., description="User-facing description of the failure")
+    code: str = Field(..., description="Machine-readable failure code")
+
+
+class StreamResponseComplete(BaseModel):
+    """SSE event that terminates every streaming turn.
+
+    Attributes:
+        type: Event discriminator, always ``"response_complete"``.
+        sources: Citation sources collected while the response was generated.
+        status: ``"ok"`` when the turn completed, ``"error"`` when the model
+            stream failed before it could finish.
+        message_id: The backend-assigned id of the persisted assistant answer.
+            This is the id the feedback endpoint accepts, so a streaming client
+            must adopt it in place of the id it generated locally before the
+            answer arrived; a locally-generated id matches no backend row and is
+            refused with a 403. It is ``None`` when the turn could not be
+            persisted.
+        user_message_id: The backend-assigned id of the persisted user message,
+            or ``None`` when the turn was not persisted.
+
+    The two ``*_message_id`` fields are additive and ``None``-defaulted so the
+    frame stays backward compatible with a client that ignores them.
+    """
+
+    type: Literal["response_complete"] = "response_complete"
+    sources: list[Any] = Field(
+        default_factory=list,
+        description=(
+            "Citations collected during the turn. Typed loosely so the "
+            "transform serializes whatever the agent collected rather than "
+            "turning a citation into a stream failure."
+        ),
+    )
+    status: Literal["ok", "error"] = Field(
+        default="ok", description="'ok' for a completed turn, 'error' for a failed one"
+    )
+    message_id: str | None = Field(
+        default=None,
+        description=(
+            "Backend-assigned id of the persisted assistant answer; the id the "
+            "feedback endpoint accepts. None when the turn was not persisted."
+        ),
+    )
+    user_message_id: str | None = Field(
+        default=None,
+        description=(
+            "Backend-assigned id of the persisted user message. None when the "
+            "turn was not persisted."
+        ),
+    )
+
+
+# --- Claims Read Schemas ---------------------------------------------------
+
+
+class ClaimSummary(BaseModel):
+    """One claim as it appears in the policyholder's claim list.
+
+    Attributes:
+        claim_id: Human-readable claim identifier (e.g., "CLM-8821").
+        policy_number: The policy the claim was filed against.
+        claim_type: Category of the claim.
+        status: Current processing status.
+        amount: Claimed amount in US dollars, serialised as a string to preserve
+            the exact precision stored in ``Numeric(12, 2)``.
+        incident_date: Date the policyholder reported the incident, or None when
+            it was never supplied.
+        created_at: Timestamp the claim was filed.
+    """
+
+    claim_id: str = Field(..., description="Human-readable claim identifier")
+    policy_number: str = Field(..., description="Policy the claim was filed against")
+    claim_type: str = Field(..., description="Category of the claim")
+    status: str = Field(..., description="Current processing status")
+    amount: Decimal = Field(
+        ...,
+        description="Claimed amount in US dollars, serialised as a string",
+    )
+    incident_date: date | None = Field(
+        default=None,
+        description="Date the policyholder reported the incident, if supplied",
+    )
+    created_at: datetime = Field(..., description="Timestamp the claim was filed")
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "claim_id": "CLM-8821",
+                "policy_number": "POL-1092",
+                "claim_type": "Water Damage",
+                "status": "Submitted",
+                "amount": "3500.00",
+                "incident_date": "2026-01-14",
+                "created_at": "2026-01-20T15:04:05Z",
+            }
+        }
+    )
+
+
+class ClaimListResponse(BaseModel):
+    """Response schema for listing the authenticated user's claims.
+
+    Attributes:
+        claims: Claims in the requested page, ordered newest first.
+        count: Number of claims in this page. Not the total number of matching
+            claims, so it never exceeds ``limit``.
+        limit: Page size that was applied.
+        offset: Number of newer claims that were skipped.
+    """
+
+    claims: list[ClaimSummary] = Field(
+        default_factory=list, description="Claims in the requested page"
+    )
+    count: int = Field(..., description="Number of claims in this page")
+    limit: int = Field(..., description="Page size that was applied")
+    offset: int = Field(..., description="Number of newer claims that were skipped")
+
+
+class ClaimDetail(ClaimSummary):
+    """A single claim plus the fields only a detail view renders.
+
+    Attributes:
+        description: Factual description of the incident.
+        citation: Source string in the same shape the agent returns, so the UI
+            renders chat citations and claim citations identically.
+        events: Lifecycle events for the claim. Empty until claim events are
+            recorded; the field exists so the response shape is stable.
+    """
+
+    description: str = Field(..., description="Factual description of the incident")
+    citation: str = Field(..., description="Source string for rendering alongside chat citations")
+    events: list[dict[str, Any]] = Field(
+        default_factory=list,
+        description=(
+            "Lifecycle events for the claim, oldest first. Empty until claim "
+            "events are recorded; the field exists so the response shape is stable."
+        ),
+    )
+
+
+# --- Claim Lifecycle Schemas ------------------------------------------------
+
+
+class ClaimEventItem(BaseModel):
+    """One transition in a claim's lifecycle, as the read API renders it.
+
+    Attributes:
+        from_status: Status the claim moved out of, or None for the event that
+            filed the claim.
+        to_status: Status the claim moved into.
+        note: Free-text reason recorded with the transition, when one was given.
+        actor_id: Who performed the transition, or None for a system transition.
+        created_at: When the transition was recorded.
+    """
+
+    from_status: str | None = Field(
+        default=None, description="Status the claim moved out of, None when the claim was filed"
+    )
+    to_status: str = Field(..., description="Status the claim moved into")
+    note: str | None = Field(
+        default=None, description="Reason recorded with the transition, when one was given"
+    )
+    actor_id: uuid.UUID | None = Field(
+        default=None, description="Who performed the transition, None for a system transition"
+    )
+    created_at: datetime = Field(..., description="When the transition was recorded")
+
+
+class ClaimStatusUpdateRequest(BaseModel):
+    """Request schema for moving a claim to a new status.
+
+    Attributes:
+        status: The status to move the claim to. Validated against the claim
+            lifecycle rather than by the schema, so an unrecognized status is
+            reported with the list of valid ones rather than as a field error.
+        note: Optional reason recorded on the lifecycle event.
+    """
+
+    status: str = Field(..., description="Status to move the claim to", min_length=1)
+    note: str | None = Field(
+        default=None, description="Reason recorded on the lifecycle event", max_length=1000
+    )
+
+
+class ClaimWithdrawRequest(BaseModel):
+    """Request schema for withdrawing a claim.
+
+    Attributes:
+        reason: Optional reason the claimant is withdrawing, recorded on the
+            lifecycle event.
+    """
+
+    reason: str | None = Field(
+        default=None, description="Reason for withdrawing the claim", max_length=1000
+    )
+
+
+class ClaimTransitionResponse(BaseModel):
+    """Response schema for a claim whose status just changed.
+
+    Attributes:
+        claim_id: Human-readable claim identifier that changed.
+        previous_status: Status the claim held before the transition.
+        status: The claim's status now.
+        note: Reason recorded on the transition, when one was given.
+        allowed_next_statuses: The statuses this claim may still move to, so a
+            client can offer only legal next actions.
+        message: Human-readable summary of the transition.
+    """
+
+    claim_id: str = Field(..., description="Human-readable claim identifier that changed")
+    previous_status: str = Field(..., description="Status held before the transition")
+    status: str = Field(..., description="The claim's status now")
+    note: str | None = Field(
+        default=None, description="Reason recorded on the transition, when one was given"
+    )
+    allowed_next_statuses: list[str] = Field(
+        default_factory=list, description="Statuses this claim may still move to"
+    )
+    message: str = Field(..., description="Human-readable summary of the transition")
+
+
+class ClaimCancelRequest(BaseModel):
+    """Request schema for cancelling a pending claim submission.
+
+    Attributes:
+        confirmation_token: The token returned by the prepare endpoint. It
+            identifies the pending submission to abandon.
+    """
+
+    confirmation_token: str = Field(
+        ...,
+        description="Confirmation token from the prepare endpoint",
+        min_length=1,
+    )
+
+
+class ClaimCancelResponse(BaseModel):
+    """Response schema for cancelling a pending claim submission.
+
+    Attributes:
+        success: Whether the cancellation succeeded.
+        message: Human-readable result message.
+    """
+
+    success: bool = Field(..., description="Whether the cancellation succeeded")
+    message: str = Field(..., description="Human-readable result message")
+
+
+# Rebuild models that reference uuid to resolve forward references.
+ClaimEventItem.model_rebuild()

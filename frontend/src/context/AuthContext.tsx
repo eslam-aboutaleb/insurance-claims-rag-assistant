@@ -16,7 +16,10 @@
  *     or ``"unauthenticated"``.
  *   - ``login`` stores the new token and user ID in both React state and
  *     localStorage.
- *   - ``logout`` clears both and triggers a toast notification.
+ *   - ``logout`` clears both and triggers a toast notification whose wording
+ *     depends on the reason: a deliberate sign-out reports success, while an
+ *     expired session (a rejected hydration or a mid-session 401) reports the
+ *     expiry instead.
  */
 
 import {
@@ -24,17 +27,26 @@ import {
   useContext,
   useState,
   useEffect,
+  useCallback,
   ReactNode,
 } from "react";
 import { toast } from "react-hot-toast";
 import { getCurrentUser } from "@/lib/api";
+
+/** A deliberate sign-out: the user asked for it. */
+const LOGOUT_MESSAGE = "Logged out successfully";
+/** The session died on its own; the user did not end it. */
+const SESSION_EXPIRED_MESSAGE = "Session expired. Please sign in again.";
+
+/** Why a session ended. Defaults to a deliberate user sign-out. */
+export type LogoutReason = "user" | "expired";
 
 interface AuthContextType {
   token: string | null;
   userId: string | null;
   status: "loading" | "authenticated" | "unauthenticated";
   login: (token: string, userId: string) => void;
-  logout: () => Promise<void>;
+  logout: (reason?: LogoutReason) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -65,6 +77,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     "loading" | "authenticated" | "unauthenticated"
   >("loading");
 
+  const clearSession = useCallback(() => {
+    localStorage.removeItem("omnicare_token");
+    localStorage.removeItem("omnicare_user_id");
+    setToken(null);
+    setUserId(null);
+    setStatus("unauthenticated");
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
 
@@ -76,11 +96,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       } catch {
         if (!cancelled) {
-          setStatus("unauthenticated");
-          localStorage.removeItem("omnicare_token");
-          localStorage.removeItem("omnicare_user_id");
-          setToken(null);
-          setUserId(null);
+          // A stored token that the backend rejects is an expiry, not a
+          // sign-out: say so instead of claiming a successful logout.
+          if (token) {
+            toast.error(SESSION_EXPIRED_MESSAGE, {
+              id: SESSION_EXPIRED_MESSAGE,
+            });
+          }
+          clearSession();
         }
       }
     }
@@ -90,7 +113,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [token]);
+  }, [token, clearSession]);
 
   const login = (newToken: string, newUserId: string) => {
     localStorage.setItem("omnicare_token", newToken);
@@ -100,7 +123,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setStatus("authenticated");
   };
 
-  const logout = async () => {
+  const logout = async (reason: LogoutReason = "user") => {
     try {
       const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:8000";
       await fetch(`${apiUrl}/api/v1/auth/logout`, {
@@ -111,12 +134,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Best-effort logout; clear local state regardless.
     }
 
-    localStorage.removeItem("omnicare_token");
-    localStorage.removeItem("omnicare_user_id");
-    setToken(null);
-    setUserId(null);
-    setStatus("unauthenticated");
-    toast.success("Logged out successfully", { id: "Logged out successfully" });
+    clearSession();
+    if (reason === "expired") {
+      toast.error(SESSION_EXPIRED_MESSAGE, { id: SESSION_EXPIRED_MESSAGE });
+      return;
+    }
+    toast.success(LOGOUT_MESSAGE, { id: LOGOUT_MESSAGE });
   };
 
   return (

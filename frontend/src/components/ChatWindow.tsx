@@ -2,8 +2,9 @@
  * ChatWindow component.
  *
  * The main conversation view. Manages message state, loads conversation
- * history when viewing an archived chat, sends new messages via React Query
- * mutation, and auto-scrolls to the latest message.
+ * history when viewing an archived chat, sends new messages via the streaming
+ * chat API, and auto-scrolls to the latest message while the reader is still
+ * at the bottom.
  *
  * Modes of operation:
  *   - New chat (historyId is null): User can send messages, which are
@@ -11,9 +12,14 @@
  *   - Archived chat (historyId is set): The window is read-only; messages
  *     are loaded from the backend and the input area is replaced with a
  *     notice telling the user to start a new chat.
+ *
+ * The transcript itself is not an ARIA live region: announcing every token
+ * makes it unusable with a screen reader. A separate polite status region
+ * carries a one-line summary of the turn instead.
  */
 
-import { useChatMessages } from "@/hooks/useChatMessages";
+import { useChatMessages, PHASE_LABELS } from "@/hooks/useChatMessages";
+import { formatDaySeparator, isSameDay } from "@/types/chat";
 import MessageBubble from "./MessageBubble";
 import ChatInput from "./ChatInput";
 import { StopCircle, RefreshCw, ChevronDown, Shield } from "lucide-react";
@@ -25,6 +31,19 @@ interface ChatWindowProps {
   onAuthError?: () => void;
   onHistoryLoaded?: () => void;
   onHistoryLoadError?: (message: string) => void;
+}
+
+/** Heading placed between messages that fall on different calendar days. */
+function DateSeparator({ date }: { date: Date }) {
+  return (
+    <div className="flex items-center gap-3 py-1" data-testid="date-separator">
+      <span className="h-px flex-1 bg-insurance-border" aria-hidden="true" />
+      <span className="text-[11px] text-insurance-ink-tertiary">
+        {formatDaySeparator(date)}
+      </span>
+      <span className="h-px flex-1 bg-insurance-border" aria-hidden="true" />
+    </div>
+  );
 }
 
 export default function ChatWindow({
@@ -43,6 +62,8 @@ export default function ChatWindow({
     hasError,
     isReadOnly,
     isStreaming,
+    streamPhase,
+    statusAnnouncement,
     scrollToBottom,
     handleScroll,
     handleSendMessage,
@@ -70,7 +91,6 @@ export default function ChatWindow({
         onScroll={handleScroll}
         className="flex-1 overflow-y-auto min-h-0 px-4 md:px-6 pt-6"
         data-testid="messages-container"
-        aria-live="polite"
       >
         {messages.length === 0 ? (
           <div
@@ -113,13 +133,20 @@ export default function ChatWindow({
             className="max-w-3xl mx-auto space-y-6 pb-24"
             data-testid="message-list"
           >
-            {messages.map((message) => (
-              <MessageBubble
-                key={message.id}
-                message={message}
-                onRetry={hasError ? handleRetryLast : undefined}
-              />
-            ))}
+            {messages.map((message, index) => {
+              const previous = messages[index - 1];
+              const startsNewDay =
+                !previous || !isSameDay(previous.timestamp, message.timestamp);
+              return (
+                <div key={message.id} className="space-y-6">
+                  {startsNewDay && <DateSeparator date={message.timestamp} />}
+                  <MessageBubble
+                    message={message}
+                    onRetry={hasError ? handleRetryLast : undefined}
+                  />
+                </div>
+              );
+            })}
             {isStreaming && !isReadOnly && (
               <div
                 id="loading-indicator"
@@ -136,8 +163,11 @@ export default function ChatWindow({
                     <div className="w-2 h-2 bg-insurance-ink-tertiary rounded-full animate-typing-dot [animation-delay:-0.15s]"></div>
                     <div className="w-2 h-2 bg-insurance-ink-tertiary rounded-full animate-typing-dot"></div>
                   </div>
-                  <span className="text-xs text-insurance-ink-secondary">
-                    OmniCare is checking your policy
+                  <span
+                    className="text-xs text-insurance-ink-secondary"
+                    data-testid="loading-phase-message"
+                  >
+                    {PHASE_LABELS[streamPhase]}
                   </span>
                 </div>
               </div>
@@ -146,6 +176,19 @@ export default function ChatWindow({
           </div>
         )}
       </div>
+
+      {/* Polite summary of the turn. The transcript deliberately stays out of
+          the accessibility tree's live regions: one announcement per phase
+          change is what a screen reader user can follow. */}
+      <p
+        id="stream-status"
+        role="status"
+        aria-live="polite"
+        className="sr-only"
+        data-testid="stream-status"
+      >
+        {statusAnnouncement}
+      </p>
 
       {showScrollButton && (
         <button

@@ -21,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.agent.context import current_user_id
 from app.database import async_session_factory
 from app.models.claim import Claim
+from app.models.claim_event import ClaimStatus
 from app.models.claim_submission import ClaimSubmission as ClaimSubmissionModel
 from app.models.embedding_job import EmbeddingJob
 from app.schemas.models import ClaimSubmission
@@ -176,7 +177,7 @@ async def submit_claim_internal(  # noqa: PLR0913, PLR0917
             claim_id=confirmation_id,
             policy_number=validated.policy_number,
             claim_type=validated.claim_type,
-            status="Submitted",
+            status=ClaimStatus.SUBMITTED.value,
             amount=validated.amount,
             description=validated.description,
             owner_id=user_uuid,
@@ -207,7 +208,7 @@ async def submit_claim_internal(  # noqa: PLR0913, PLR0917
         return {
             "success": True,
             "confirmation_id": confirmation_id,
-            "status": "Submitted",
+            "status": ClaimStatus.SUBMITTED.value,
             "policy_number": validated.policy_number,
             "claim_type": validated.claim_type,
             "amount": validated.amount,

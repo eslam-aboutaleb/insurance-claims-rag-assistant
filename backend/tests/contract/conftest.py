@@ -200,6 +200,23 @@ def user_b(contract_client: TestClient) -> SeededUser:
     return signup(contract_client, _unique("contract_user_b"))
 
 
+_PRISTINE_AGENT_MODEL: dict[str, Any] = {"model": None}
+"""The agent's real model, captured once on first use.
+
+The agent is a process-wide singleton built lazily, and several suites swap its
+model for a scripted double. Each suite must restore to *this* value rather than
+to whatever is installed when it happens to run, or a leaked double becomes the
+next suite's baseline. See ``install_scripted_llm``.
+"""
+
+
+def _pristine_agent_model(agent_module: Any) -> Any:
+    """Return the agent's real model, capturing it on first use."""
+    if _PRISTINE_AGENT_MODEL["model"] is None:
+        _PRISTINE_AGENT_MODEL["model"] = agent_module.omnicare_agent.model
+    return _PRISTINE_AGENT_MODEL["model"]
+
+
 @pytest.fixture
 def install_scripted_llm() -> Iterator[Callable[[ScriptedTurn], ScriptedLlm]]:
     """Return a factory that swaps the agent's model for a ``ScriptedLlm``.
@@ -216,7 +233,7 @@ def install_scripted_llm() -> Iterator[Callable[[ScriptedTurn], ScriptedLlm]]:
     from app.agent import agent as agent_module  # noqa: PLC0415
 
     agent_module.get_runner()  # the agent is built lazily on first use
-    original = agent_module.omnicare_agent.model
+    original = _pristine_agent_model(agent_module)
     installed: list[ScriptedLlm] = []
 
     def _install(turn: ScriptedTurn) -> ScriptedLlm:
@@ -227,4 +244,9 @@ def install_scripted_llm() -> Iterator[Callable[[ScriptedTurn], ScriptedLlm]]:
 
     yield _install
 
+    # Restore to the pristine model captured at import, not to whatever is
+    # installed right now. Capturing per test chains across tests that share
+    # the process-wide agent: a leaked double from one suite becomes the next
+    # suite's "original" and the agent silently runs a script that belongs to
+    # an earlier test.
     agent_module.omnicare_agent.model = original

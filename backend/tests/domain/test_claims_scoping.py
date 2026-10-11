@@ -14,7 +14,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from app.agent.context import current_user_id
 from app.domain.claims.retriever import ClaimsRetriever
+from app.domain.claims.tools import search_claims
 
 
 @pytest.mark.asyncio
@@ -53,3 +55,38 @@ async def test_claims_retrieval_owner_filter_is_the_requesting_user_only():
 
     kwargs = mock_instance.retrieve.await_args.kwargs
     assert kwargs["owner_id"] == str(user_c)
+
+
+@pytest.mark.asyncio
+async def test_search_claims_envelope_never_exposes_the_owner_uuid():
+    """The search tool drops ``owner_id`` before a retrieval row reaches the model.
+
+    Scoping happens on the retrieval side; the tool projection is the second
+    guard, so the caller's raw UUID and the internal ranking signals never
+    enter the LLM-facing envelope.
+    """
+    user = uuid.UUID("00000000-0000-0000-0000-000000000002")
+    current_user_id.set(user)
+
+    raw_row = {
+        "document": "Claim CLM-9: Water damage",
+        "metadata": {
+            "claim_id": "CLM-9",
+            "policy_number": "POL-9",
+            "owner_id": str(user),
+        },
+        "distance": 0.2,
+        "_rrf_score": 0.75,
+    }
+
+    with patch(
+        "app.domain.claims.tools.retrieve_claims_hybrid", new_callable=AsyncMock
+    ) as mock_retrieve:
+        mock_retrieve.return_value = [raw_row]
+        envelope = await search_claims("water damage")
+
+    assert envelope["count"] == 1
+    assert str(user) not in str(envelope)
+    projected = envelope["results"][0]
+    assert set(projected["metadata"]) == {"claim_id", "policy_number"}
+    assert projected["citation"] == "Claim CLM-9 in the OmniCare claims system (policy POL-9)."

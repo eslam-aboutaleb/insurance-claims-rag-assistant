@@ -1,12 +1,17 @@
 """Tool registry for the OmniCare agent.
 
 The registry is the single place the agent's toolset is
-
-The registry is the single place the agent's toolset is
 declared: adding a tool is one ``register`` call, with no
 ``agent.py`` edit. The agent assembly
 (:func:`app.agent.agent.create_agent`) consumes the registry
 through :meth:`ToolRegistry.build_tool_list`.
+
+``ToolSpec.description`` is documentation-only: it never
+reaches the model, because :meth:`ToolRegistry.build_tool_list`
+returns just the handlers and the model sees each function's
+own docstring instead. The model-facing contract therefore
+lives in the tool docstrings and ``SYSTEM_INSTRUCTION``, not
+here.
 """
 
 from __future__ import annotations
@@ -19,6 +24,7 @@ from app.agent.tools.claim_status import get_claim_status
 from app.agent.tools.submit_claim import prepare_claim_submission
 from app.domain.claims.tools import search_claims
 from app.domain.policies.tools import query_policy
+from app.domain.procedures.tools import get_procedure
 
 
 @dataclass
@@ -63,11 +69,12 @@ class ToolRegistry:
 
 
 def build_default_registry() -> ToolRegistry:
-    """Register the four OmniCare tools.
+    """Register the five OmniCare tools.
 
     Returns:
         A registry with ``query_policy``, ``get_claim_status``,
-        ``search_claims``, and ``prepare_claim_submission``.
+        ``search_claims``, ``prepare_claim_submission``, and
+        ``get_procedure``.
     """
     registry = ToolRegistry()
     registry.register(
@@ -84,7 +91,9 @@ def build_default_registry() -> ToolRegistry:
         ToolSpec(
             name="get_claim_status",
             description=(
-                "Look up the status of a specific claim by its confirmation token or claim ID."
+                "Look up the status of an existing claim by its claim ID when the "
+                "user already knows it; a returned found=false means no such "
+                "claim exists and must not be treated as one."
             ),
             handler=get_claim_status,
             metadata={"requires_auth": True},
@@ -103,6 +112,18 @@ def build_default_registry() -> ToolRegistry:
             name="prepare_claim_submission",
             description="Validate and prepare a claim submission for confirmation.",
             handler=prepare_claim_submission,
+            metadata={"requires_auth": True},
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="get_procedure",
+            description=(
+                "Load a domain procedure playbook (coverage-review or claim-triage) "
+                "from the procedures index before making a coverage determination "
+                "or routing an unclear request."
+            ),
+            handler=get_procedure,
             metadata={"requires_auth": True},
         )
     )

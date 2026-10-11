@@ -141,8 +141,14 @@ class TestClaimIDOR:
         assert call_kwargs["user_id"] == user_b_id
 
         # Result should only contain User B's claims
-        assert len(result) == 1
-        assert result[0]["metadata"]["owner_id"] == str(user_b_id)
+        assert result["count"] == 1
+        assert len(result["results"]) == 1
+        assert result["results"][0]["document"] == "User B claim"
+
+        # The caller's own raw user UUID must never reach the model context:
+        # it is already implied by the retrieval scoping, so exposing it only
+        # adds a leak surface with no benefit.
+        assert "owner_id" not in result["results"][0]["metadata"]
 
 
 # ============================================================================

@@ -1,8 +1,10 @@
 /**
  * AuthModal component.
  *
- * A modal dialog for user authentication. Supports both sign-in and sign-up
- * modes, controlled by the ``isLogin`` prop. The form validates input lengths
+ * The authentication form for both sign-in and sign-up modes, controlled by the
+ * ``isLogin`` prop. LoginPage and SignupPage render it as the whole page, so the
+ * card is a ``main`` landmark rather than a floating dialog: there is nothing
+ * behind it to dim or trap focus. Input is validated for shape and length
  * client-side before submitting to the backend auth endpoints.
  *
  * Props:
@@ -109,15 +111,15 @@ export default function AuthModal({
 
   return (
     <div className="fixed inset-0 bg-insurance-ink/20 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-insurance-surface border border-insurance-border rounded-2xl shadow-lifted w-full max-w-md max-h-[calc(100vh-2rem)] overflow-y-auto">
+      <main className="bg-insurance-surface border border-insurance-border rounded-2xl shadow-lifted w-full max-w-md max-h-[calc(100vh-2rem)] overflow-y-auto">
         <div className="p-6 md:p-8">
           <div className="mb-8 text-center">
             <div className="w-12 h-12 rounded-xl bg-insurance-info text-white flex items-center justify-center shadow-soft mx-auto mb-4">
               <Shield className="w-6 h-6" />
             </div>
-            <h2 className="text-xl md:text-2xl font-semibold text-insurance-ink tracking-tight">
+            <h1 className="text-xl md:text-2xl font-semibold text-insurance-ink tracking-tight">
               {isLogin ? "Sign in to OmniCare" : "Create your OmniCare account"}
-            </h2>
+            </h1>
             <p className="mt-2 text-sm text-insurance-ink-secondary">
               {isLogin
                 ? "Welcome back. Sign in to access your policies and claims."
@@ -127,10 +129,15 @@ export default function AuthModal({
 
           <form onSubmit={handleSubmit} className="space-y-5">
             <div>
-              <label className="block text-insurance-ink text-sm font-medium mb-2">
+              <label
+                htmlFor="auth-email"
+                className="block text-insurance-ink text-sm font-medium mb-2"
+              >
                 Email
               </label>
               <input
+                id="auth-email"
+                name="email"
                 type="email"
                 value={email}
                 onChange={(e) => {
@@ -138,6 +145,10 @@ export default function AuthModal({
                   if (fieldErrors.email)
                     setFieldErrors((prev) => ({ ...prev, email: undefined }));
                 }}
+                aria-invalid={fieldErrors.email ? true : undefined}
+                aria-describedby={
+                  fieldErrors.email ? "auth-email-error" : undefined
+                }
                 className={`w-full bg-insurance-bg border ${
                   fieldErrors.email
                     ? "border-insurance-error"
@@ -146,19 +157,28 @@ export default function AuthModal({
                 placeholder="Enter your email"
                 required
                 autoComplete="email"
+                autoFocus
               />
               {fieldErrors.email && (
-                <p className="mt-1.5 text-xs text-insurance-error">
+                <p
+                  id="auth-email-error"
+                  className="mt-1.5 text-xs text-insurance-error"
+                >
                   {fieldErrors.email}
                 </p>
               )}
             </div>
             <div>
-              <label className="block text-insurance-ink text-sm font-medium mb-2">
+              <label
+                htmlFor="auth-password"
+                className="block text-insurance-ink text-sm font-medium mb-2"
+              >
                 Password
               </label>
               <div className="relative">
                 <input
+                  id="auth-password"
+                  name="password"
                   type={showPassword ? "text" : "password"}
                   value={password}
                   onChange={(e) => {
@@ -169,6 +189,10 @@ export default function AuthModal({
                         password: undefined,
                       }));
                   }}
+                  aria-invalid={fieldErrors.password ? true : undefined}
+                  aria-describedby={
+                    fieldErrors.password ? "auth-password-error" : undefined
+                  }
                   className={`w-full bg-insurance-bg border ${
                     fieldErrors.password
                       ? "border-insurance-error"
@@ -192,7 +216,10 @@ export default function AuthModal({
                 </button>
               </div>
               {fieldErrors.password && (
-                <p className="mt-1.5 text-xs text-insurance-error">
+                <p
+                  id="auth-password-error"
+                  className="mt-1.5 text-xs text-insurance-error"
+                >
                   {fieldErrors.password}
                 </p>
               )}
@@ -200,11 +227,16 @@ export default function AuthModal({
 
             {!isLogin && (
               <div>
-                <label className="block text-insurance-ink text-sm font-medium mb-2">
+                <label
+                  htmlFor="auth-confirm-password"
+                  className="block text-insurance-ink text-sm font-medium mb-2"
+                >
                   Confirm password
                 </label>
                 <div className="relative">
                   <input
+                    id="auth-confirm-password"
+                    name="confirm-password"
                     type={showConfirmPassword ? "text" : "password"}
                     value={confirmPassword}
                     onChange={(e) => {
@@ -215,6 +247,14 @@ export default function AuthModal({
                           confirmPassword: undefined,
                         }));
                     }}
+                    aria-invalid={
+                      fieldErrors.confirmPassword ? true : undefined
+                    }
+                    aria-describedby={
+                      fieldErrors.confirmPassword
+                        ? "auth-confirm-password-error"
+                        : undefined
+                    }
                     className={`w-full bg-insurance-bg border ${
                       fieldErrors.confirmPassword
                         ? "border-insurance-error"
@@ -240,7 +280,10 @@ export default function AuthModal({
                   </button>
                 </div>
                 {fieldErrors.confirmPassword && (
-                  <p className="mt-1.5 text-xs text-insurance-error">
+                  <p
+                    id="auth-confirm-password-error"
+                    className="mt-1.5 text-xs text-insurance-error"
+                  >
                     {fieldErrors.confirmPassword}
                   </p>
                 )}
@@ -271,7 +314,7 @@ export default function AuthModal({
             </button>
           </div>
         </div>
-      </div>
+      </main>
     </div>
   );
 }

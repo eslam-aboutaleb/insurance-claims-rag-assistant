@@ -194,8 +194,14 @@ def chunk_policy_document(filepath: str) -> list[dict[str, Any]]:
     .. deprecated::
         Use the ragit ingestion pipeline with a
         :class:`ragit.chunking.MarkdownSectionChunker`
-        instead. This wrapper remains for one release for
-        backward compatibility.
+        instead. The pipeline owns ingestion now; this thin
+        wrapper exists only for callers that want the chunk
+        dicts from a file path on disk -- the unit tests that
+        pin the chunker's section boundaries, mainly. Nothing
+        in the application's ingestion path calls it, so it
+        carries no snapshot or version state and cannot be
+        relied on to stay in step with what
+        :func:`ingest_policy` writes to the database.
 
     Args:
         filepath: Path to the Markdown policy file.

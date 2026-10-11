@@ -68,8 +68,8 @@ def test_env_example_placeholder_is_covered_by_the_validator() -> None:
     # differs between the host (backend/tests/... -> repo root) and the Docker
     # image (/app/tests/... -> /app), so a fixed parents[2] is fragile.
     example = None
-    for candidate in Path(__file__).resolve().parents:
-        candidate = candidate / ".env.example"
+    for parent in Path(__file__).resolve().parents:
+        candidate = parent / ".env.example"
         if candidate.is_file():
             example = candidate
             break

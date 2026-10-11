@@ -18,4 +18,9 @@ class TestSearchClaimsTool:
         with patch("app.agent.context.current_user_id") as mock_cv:
             mock_cv.get.side_effect = LookupError
             result = await search_claims(query="claim")
-            assert result == [{"error": "Unauthorized claim search."}]
+            assert result == {
+                "results": [],
+                "count": 0,
+                "message": None,
+                "error": "Unauthorized claim search.",
+            }

@@ -1,3 +1,6 @@
 {
-  "type": "response_complete"
+  "type": "response_complete",
+  "status": "ok",
+  "message_id": null,
+  "user_message_id": null
 }

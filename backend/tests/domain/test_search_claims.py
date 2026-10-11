@@ -22,7 +22,12 @@ async def test_search_claims_unauthorized():
 
         result = await search_claims("water damage")
 
-    assert result == [{"error": "Unauthorized claim search."}]
+    assert result == {
+        "results": [],
+        "count": 0,
+        "message": None,
+        "error": "Unauthorized claim search.",
+    }
 
 
 @pytest.mark.asyncio
@@ -36,7 +41,12 @@ async def test_search_claims_no_results():
 
         result = await search_claims("water damage")
 
-    assert result == [{"message": "No relevant claims found matching your search."}]
+    assert result == {
+        "results": [],
+        "count": 0,
+        "message": "No relevant claims found matching your search.",
+        "error": None,
+    }
 
 
 @pytest.mark.asyncio
@@ -50,7 +60,12 @@ async def test_search_claims_error_path():
 
         result = await search_claims("water damage")
 
-    assert result == [{"error": "Unable to search claims at this time. Please try again later."}]
+    assert result == {
+        "results": [],
+        "count": 0,
+        "message": None,
+        "error": "Unable to search claims at this time. Please try again later.",
+    }
 
 
 @pytest.mark.asyncio
@@ -60,7 +75,7 @@ async def test_search_claims_success():
     mock_results = [
         {
             "document": "Claim CLM-1: Water damage",
-            "metadata": {"claim_id": "CLM-1"},
+            "metadata": {"claim_id": "CLM-1", "policy_number": "POL-1001"},
             "distance": 0.5,
         }
     ]
@@ -72,4 +87,48 @@ async def test_search_claims_success():
 
         result = await search_claims("water damage")
 
-    assert result == mock_results
+    assert result == {
+        "results": [
+            {
+                "document": "Claim CLM-1: Water damage",
+                "metadata": {"claim_id": "CLM-1", "policy_number": "POL-1001"},
+                "citation": "Claim CLM-1 in the OmniCare claims system (policy POL-1001).",
+            }
+        ],
+        "count": 1,
+        "message": None,
+        "error": None,
+    }
+
+
+@pytest.mark.asyncio
+async def test_search_claims_strips_owner_and_ranking_fields():
+    """The LLM-facing envelope never carries the raw owner UUID or ranking scores."""
+    current_user_id.set(uuid.uuid4())
+
+    mock_results = [
+        {
+            "document": "Claim CLM-1: Water damage",
+            "metadata": {
+                "claim_id": "CLM-1",
+                "policy_number": "POL-1001",
+                "owner_id": "00000000-0000-0000-0000-000000000009",
+            },
+            "distance": 0.5,
+            "_rrf_score": 0.9,
+        }
+    ]
+
+    with patch(
+        "app.domain.claims.tools.retrieve_claims_hybrid", new_callable=AsyncMock
+    ) as mock_retrieve:
+        mock_retrieve.return_value = mock_results
+
+        envelope = await search_claims("water damage")
+
+    assert len(envelope["results"]) == 1
+    projected = envelope["results"][0]
+    assert "owner_id" not in projected["metadata"]
+    assert "_rrf_score" not in projected["metadata"]
+    assert "distance" not in projected
+    assert set(projected) == {"document", "metadata", "citation"}

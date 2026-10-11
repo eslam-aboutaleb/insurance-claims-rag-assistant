@@ -21,12 +21,13 @@ Security notes:
 
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.concurrency import run_in_threadpool
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.audit import record_audit
 from app.auth import (
     DUMMY_PASSWORD_HASH,
     clear_session_cookie,
@@ -44,7 +45,12 @@ router = APIRouter()
 
 
 @router.post("/signup", response_model=Token, status_code=status.HTTP_201_CREATED)
-async def signup(payload: UserSignup, response: Response, session: AsyncSession = Depends(get_db)):
+async def signup(
+    payload: UserSignup,
+    response: Response,
+    request: Request,
+    session: AsyncSession = Depends(get_db),
+):
     """Register a new OmniCare user account.
 
     Validates that the username is unique, hashes the password with Argon2id,
@@ -53,6 +59,8 @@ async def signup(payload: UserSignup, response: Response, session: AsyncSession 
     Args:
         payload: Validated signup payload containing username and password.
         response: FastAPI response object used to set the session cookie.
+        request: The request being audited; supplies the client IP and user
+            agent for the audit trail entry.
         session: The async database session.
 
     Returns:
@@ -77,6 +85,20 @@ async def signup(payload: UserSignup, response: Response, session: AsyncSession 
         password_hash=password_hash,
     )
     session.add(user)
+
+    # Account creation is an audit-worthy event: an operator asked "who opened
+    # this account" has no other answer. Recorded inside the signup's own
+    # transaction, so a rejected duplicate leaves neither row behind.
+    await record_audit(
+        session,
+        "auth.signup",
+        "user",
+        str(user.id),
+        after={"username": user.username},
+        actor_id=user.id,
+        request=request,
+    )
+
     try:
         await session.commit()
     except IntegrityError as exc:
@@ -93,7 +115,12 @@ async def signup(payload: UserSignup, response: Response, session: AsyncSession 
 
 
 @router.post("/signin", response_model=Token)
-async def signin(payload: UserSignin, response: Response, session: AsyncSession = Depends(get_db)):
+async def signin(
+    payload: UserSignin,
+    response: Response,
+    request: Request,
+    session: AsyncSession = Depends(get_db),
+):
     """Authenticate an existing user and issue a JWT session.
 
     Uses a timing-safe password comparison to prevent user enumeration
@@ -102,6 +129,8 @@ async def signin(payload: UserSignin, response: Response, session: AsyncSession 
     Args:
         payload: Validated signin payload containing username and password.
         response: FastAPI response object used to set the session cookie.
+        request: The request being audited; supplies the client IP and user
+            agent for both the success and the failure trail entries.
         session: The async database session.
 
     Returns:
@@ -120,22 +149,64 @@ async def signin(payload: UserSignin, response: Response, session: AsyncSession 
     password_matches = await run_in_threadpool(verify_password, payload.password, stored_hash)
 
     if user is None or not password_matches:
+        # A failed sign-in is the one event an operator needs more than a
+        # successful one: it is how a credential-stuffing run announces itself.
+        # The attempted username is recorded because it is the only identifier
+        # the attempt produced, and no response ever echoes it back. The row is
+        # committed before the 401 is raised, because a refusal that leaves
+        # nothing behind is a trail with a hole exactly where it matters.
+        await record_audit(
+            session,
+            "auth.signin_failed",
+            "user",
+            payload.username,
+            request=request,
+        )
+        await session.commit()
         raise HTTPException(status_code=401, detail="Incorrect username or password")
 
     access_token = create_access_token(user.id)
     set_session_cookie(response, access_token)
+
+    await record_audit(
+        session,
+        "auth.signin",
+        "user",
+        str(user.id),
+        actor_id=user.id,
+        request=request,
+    )
+    await session.commit()
     return {"access_token": access_token, "token_type": "bearer", "user_id": str(user.id)}
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
-async def logout(response: Response):
+async def logout(
+    response: Response,
+    request: Request,
+    session: AsyncSession = Depends(get_db),
+):
     """Invalidate the current session by clearing the session cookie.
+
+    Args:
+        response: FastAPI response object used to clear the session cookie.
+        request: The request being audited; supplies the client IP and user
+            agent for the audit trail entry.
+        session: The async database session.
 
     Returns:
         Response: 204 No Content on success.
     """
     clear_session_cookie(response)
     response.status_code = status.HTTP_204_NO_CONTENT
+
+    # The endpoint is deliberately public and reads no credential, so a logout
+    # is recorded with no actor: what is knowable is that a sign-out happened,
+    # from where, under which correlation id. An operator correlating a session
+    # against the sign-in and the sign-in failure entries still gets the full
+    # picture of the attempt.
+    await record_audit(session, "auth.logout", "session", None, request=request)
+    await session.commit()
     return response
 
 

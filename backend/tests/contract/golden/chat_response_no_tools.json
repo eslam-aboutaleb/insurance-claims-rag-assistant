@@ -1,5 +1,7 @@
 {
   "response": "Ask me anything about your policy.",
   "sources": [],
-  "tool_calls": []
+  "tool_calls": [],
+  "message_id": null,
+  "user_message_id": null
 }

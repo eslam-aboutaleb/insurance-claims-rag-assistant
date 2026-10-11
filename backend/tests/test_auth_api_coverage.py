@@ -1,4 +1,9 @@
-"""Coverage tests for app.api.v1.auth uncovered paths."""
+"""Coverage tests for app.api.v1.auth uncovered paths.
+
+The signup and signin endpoints carry an audit-trail write, so the direct-call
+unit tests below pass a minimal ``Request``: the trail reads the client IP and
+user agent from it when one is in scope, and a direct call has none.
+"""
 
 from __future__ import annotations
 
@@ -6,11 +11,15 @@ import uuid
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from fastapi import HTTPException, Response
+from fastapi import HTTPException, Request, Response
 from sqlalchemy.exc import IntegrityError
 
 _TEST_PASSWORD = "TestPass123!"
 _WRONG_PASSWORD = "WrongPass1!"
+
+# A request scope carrying no client and no headers: the audit trail reads both
+# as absent, which is the honest answer for a call made outside a request.
+_AUDITED_REQUEST = Request(scope={"type": "http", "headers": [], "method": "POST"})
 
 
 class TestAuthAPI:
@@ -109,12 +118,15 @@ class TestAuthEndpointUnits:
         result = await signup(
             payload=UserSignup(username=f"unit_{uuid.uuid4().hex[:8]}", password=_TEST_PASSWORD),
             response=response,
+            request=_AUDITED_REQUEST,
             session=session,
         )
 
         assert result["token_type"] == "bearer"
         assert result["user_id"]
         session.add.assert_called_once()
+        # One commit persists the account and its audit entry together, because
+        # the entry is written in a savepoint of this transaction.
         session.commit.assert_awaited_once()
 
     @pytest.mark.asyncio
@@ -131,6 +143,7 @@ class TestAuthEndpointUnits:
             await signup(
                 payload=UserSignup(username="unit_int", password=_TEST_PASSWORD),
                 response=Response(),
+                request=_AUDITED_REQUEST,
                 session=session,
             )
 
@@ -148,6 +161,7 @@ class TestAuthEndpointUnits:
             await signup(
                 payload=UserSignup(username="unit_dup", password=_TEST_PASSWORD),
                 response=Response(),
+                request=_AUDITED_REQUEST,
                 session=session,
             )
 
@@ -168,6 +182,7 @@ class TestAuthEndpointUnits:
                 await signin(
                     payload=UserSignin(username="unit_missing", password=_WRONG_PASSWORD),
                     response=Response(),
+                    request=_AUDITED_REQUEST,
                     session=session,
                 )
 
@@ -190,6 +205,7 @@ class TestAuthEndpointUnits:
                 await signin(
                     payload=UserSignin(username="unit_user", password=_WRONG_PASSWORD),
                     response=Response(),
+                    request=_AUDITED_REQUEST,
                     session=session,
                 )
 

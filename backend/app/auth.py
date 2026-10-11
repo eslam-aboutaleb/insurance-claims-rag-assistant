@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import datetime
 import uuid
+from collections.abc import Callable
 
 import jwt
 from argon2 import PasswordHasher
@@ -37,7 +38,7 @@ from app.agent.context import current_user_id
 # fallback value is for local development only.
 from app.config import settings
 from app.database import get_db
-from app.models.user import User
+from app.models.user import User, UserRole
 
 SECRET_KEY = settings.jwt_secret_key
 ALGORITHM = "HS256"
@@ -264,3 +265,65 @@ async def get_current_user(
 
     current_user_id.set(user.id)
     return str(user.id)
+
+
+def require_role(*roles: UserRole | str) -> Callable[..., str]:
+    """Build a dependency that admits only users holding one of ``roles``.
+
+    The authorization seam every privileged route needs. It composes with
+    ``get_current_user`` rather than replacing it, so token resolution, cookie
+    clearing, and the ``current_user_id`` context variable keep one
+    implementation and the dependency contract every existing router and the
+    frozen contract suite rely on stays untouched.
+
+    The role is read from the database on every request rather than from the
+    token, because the token carries only the user id: promoting or demoting an
+    account takes effect on that account's next request instead of whenever its
+    week-long token happens to expire.
+
+    Args:
+        *roles: The roles allowed through, as ``UserRole`` members or their
+            string values. An empty list admits nobody.
+
+    Returns:
+        Callable[..., str]: A FastAPI dependency that resolves to the
+        authenticated user's UUID string, mirroring ``get_current_user`` so it
+        can stand in for it anywhere.
+    """
+    # The column holds the enum's value, so a caller may pass either the member
+    # or the raw string and still compare equal.
+    allowed_values = frozenset(
+        role.value if isinstance(role, UserRole) else str(role) for role in roles
+    )
+    allowed = ", ".join(sorted(allowed_values))
+
+    async def _require_role(
+        current_user_id: str = Depends(get_current_user),
+        session: AsyncSession = Depends(get_db),
+    ) -> str:
+        try:
+            user_uuid = uuid.UUID(current_user_id)
+        except ValueError:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid user",
+            ) from None
+
+        user = (
+            await session.execute(select(User).where(User.id == user_uuid))
+        ).scalar_one_or_none()
+        if user is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Account not found",
+            )
+
+        if str(user.role) not in allowed_values:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"This action requires one of the following roles: {allowed}.",
+            )
+
+        return current_user_id
+
+    return _require_role

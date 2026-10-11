@@ -17,7 +17,7 @@ from decimal import Decimal
 from typing import Any
 from uuid import UUID
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -25,23 +25,50 @@ from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 
-from app.agent.agent import configure_llm
+from app.agent.agent import configure_llm, warm_session_service
 from app.api.v1.router import router as v1_router
 from app.config import get_settings
+from app.idempotency import configure_idempotency_storage
 from app.middleware import RequestSizeLimitMiddleware
 from app.domain.policies.ingestion import ingest_policy
-from app.rate_limiter import limiter
+from app.domain.procedures.ingestion import (
+    ingest_procedures,
+    procedures_ingestion_enabled,
+)
+from app.observability.llm_callback import register_llm_cost_callback
+from app.observability.logging_config import configure_logging
+from app.observability.middleware import RequestIdMiddleware
+from app.observability.routes import router as observability_router
+from app.observability.tool_instrumentation import install_tool_instrumentation
+from app.rate_limiter import limiter, record_rate_limit_rejection
 from app.schemas.models import ErrorDetail, ErrorResponse
 
 # Load centralized settings
 settings = get_settings()
 
-# Configure logging using centralized settings
-logging.basicConfig(
-    level=getattr(logging, settings.log_level.upper(), logging.INFO),
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-)
+# Structured logging replaces ``logging.basicConfig`` so every record carries the
+# correlation id and one JSON object lands per line for a log aggregator.
+configure_logging(settings.log_level, settings.log_format)
 logger = logging.getLogger(__name__)
+
+
+def _install_observability_hooks() -> None:
+    """Register the optional LLM and tool telemetry hooks.
+
+    Kept in its own function because the two hooks fail independently and
+    neither is worth a failed startup: losing telemetry must never take the chat
+    endpoints down with it.
+    """
+    try:
+        if settings.llm_cost_tracking_enabled:
+            register_llm_cost_callback()
+    except Exception:
+        logger.warning("LLM cost callback registration skipped", exc_info=True)
+
+    try:
+        install_tool_instrumentation()
+    except Exception:
+        logger.warning("Tool latency instrumentation skipped", exc_info=True)
 
 
 async def _run_alembic_migrations() -> None:
@@ -85,6 +112,30 @@ async def _run_alembic_migrations() -> None:
         raise RuntimeError(f"Failed to run database migrations: {e}") from e
 
 
+async def _configure_distributed_state() -> None:
+    """Wire the session store and the Redis-backed caches from settings.
+
+    Both stores degrade rather than fail: Redis that is not configured, not
+    answering, or misconfigured leaves the in-process behaviour in place, which
+    costs replay deduplication and global rate limits but never the endpoints
+    themselves. Wired here, once, so the first request does not pay for it.
+    """
+    try:
+        await configure_idempotency_storage()
+    except Exception:
+        logger.warning(
+            "Idempotency storage could not be configured; staying in-process.",
+            exc_info=True,
+        )
+    try:
+        await warm_session_service()
+    except Exception:
+        logger.warning(
+            "Session storage could not be warmed; this process keeps in-memory sessions.",
+            exc_info=True,
+        )
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """
@@ -92,9 +143,16 @@ async def lifespan(app: FastAPI):
     On startup:
       - Applies pending database migrations via Alembic.
       - Configures LiteLLM environment variables.
+      - Registers the cost/latency telemetry hooks.
+      - Selects session storage and the shared caches (Redis when configured).
       - Ingests the policy document into pgvector store (idempotent).
+      - Ingests the procedure playbooks into their own index, gated separately
+        from the policy corpus by OMNICARE_INGEST_PROCEDURES.
     On shutdown:
       - Gracefully terminates running sessions and resources.
+
+    Both ingests are best-effort: a failure is logged and startup continues,
+    so a broken policy file cannot take the claim endpoints down with it.
     """
     logger.info(
         "Starting %s (Environment: %s, Version: %s)...",
@@ -112,6 +170,15 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"LiteLLM configuration skipped: {e}")
 
+    if settings.observability_enabled:
+        _install_observability_hooks()
+    else:
+        logger.info(
+            "Observability hooks disabled (OBSERVABILITY_ENABLED=false); no telemetry recorded."
+        )
+
+    await _configure_distributed_state()
+
     # Ingest policy documents into vector store on startup
     if settings.ingest_on_startup:
         try:
@@ -125,6 +192,18 @@ async def lifespan(app: FastAPI):
             "Startup ingestion disabled (INGEST_ON_STARTUP=false); "
             "serving the policy index already present in the database."
         )
+
+    # Ingest the procedure playbooks into their own index. Gated separately from
+    # the policy corpus because the two are operated independently: compliance
+    # ships a new playbook without touching policies, and the call is idempotent
+    # so a warm boot costs a file read plus a snapshot compare. As above, a
+    # failure here must not take the chat endpoints down with it.
+    if procedures_ingestion_enabled():
+        try:
+            count = await ingest_procedures()
+            logger.info(f"Procedure ingestion complete: {count} chunks indexed")
+        except Exception as e:
+            logger.error(f"Procedure ingestion failed: {e}")
 
     yield  # Server is running and receiving traffic
 
@@ -164,7 +243,7 @@ def _jsonify_validation_value(value: Any) -> Any:  # noqa: PLR0911
     unexpected type degrades to ``repr`` rather than being expanded attribute by
     attribute, which is what ``jsonable_encoder`` would do.
     """
-    if isinstance(value, (bytes, bytearray)):
+    if isinstance(value, bytes | bytearray):
         return value.decode("utf-8", errors="replace")
     if isinstance(value, _JSON_SAFE_ERROR_TYPES):
         return value
@@ -172,13 +251,13 @@ def _jsonify_validation_value(value: Any) -> Any:  # noqa: PLR0911
         # Keep integral values as int so the wire format is unchanged for whole-number
         # constraints (0 stays 0, not 0.0); fractional constraints become float.
         return int(value) if value == value.to_integral_value() else float(value)
-    if isinstance(value, (UUID, datetime, date)):
+    if isinstance(value, UUID | datetime | date):
         return value.isoformat()
     if isinstance(value, dict):
         return {str(key): _jsonify_validation_value(item) for key, item in value.items()}
     return (
         [_jsonify_validation_value(item) for item in value]
-        if isinstance(value, (list, tuple, set))
+        if isinstance(value, list | tuple | set)
         else repr(value)
     )
 
@@ -231,6 +310,20 @@ async def request_validation_exception_handler(
     )
 
 
+def _rate_limit_exceeded_handler_with_metrics(
+    request: Request,
+    exc: RateLimitExceeded,
+) -> Response:
+    """Count a rejected request before handing it to SlowAPI's own handler.
+
+    The status code, body, and rate-limit headers are produced by SlowAPI
+    unchanged; only the telemetry counter moves, so the frozen 429 contract is
+    untouched.
+    """
+    record_rate_limit_rejection(request.url.path)
+    return _rate_limit_exceeded_handler(request, exc)
+
+
 # Configure CORS dynamically from validated settings
 app.add_middleware(
     CORSMiddleware,
@@ -243,15 +336,25 @@ app.add_middleware(
 # Register rate limit exception handler BEFORE middleware so it can catch
 # RateLimitExceeded raised by SlowAPIMiddleware.
 app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler_with_metrics)
 
 # Register SlowAPIMiddleware so @limiter.limit(...) decorators actually enforce limits.
 app.add_middleware(SlowAPIMiddleware)
 
 app.add_middleware(RequestSizeLimitMiddleware, max_upload_size=5 * 1024 * 1024)
 
+# Registered last, so the correlation id wraps every other middleware and every
+# exception handler and is therefore echoed on validation errors and rate-limit
+# rejections too, not only on successful responses.
+if settings.observability_enabled:
+    app.add_middleware(RequestIdMiddleware)
+
 # Mount API v1 router
 app.include_router(v1_router)
+
+# Detailed telemetry shares the v1 prefix but is registered separately so the
+# pinned /health route and its response shape stay untouched.
+app.include_router(observability_router)
 
 
 @app.exception_handler(HTTPException)

@@ -98,15 +98,12 @@ class TestLiveLLMChatE2E:
         confirmation_token = None
         for tool_call in submit_data.get("tool_calls", []):
             if tool_call.get("name") == "prepare_claim_submission":
-                confirmation_token = tool_call.get("result", {}).get(
-                    "confirmation_token"
-                )
+                confirmation_token = tool_call.get("result", {}).get("confirmation_token")
                 break
 
         if not confirmation_token:
             pytest.skip(
-                "Claim preparation did not return a confirmation_token; "
-                "cannot test lookup"
+                "Claim preparation did not return a confirmation_token; " "cannot test lookup"
             )
 
         confirm_response = test_client.post(

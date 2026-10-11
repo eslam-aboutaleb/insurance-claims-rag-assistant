@@ -3,7 +3,7 @@ import AuthModal from "@/components/AuthModal";
 import { useAuth } from "@/context/AuthContext";
 
 export default function SignupPage() {
-  const { status } = useAuth();
+  const { status, login } = useAuth();
   const navigate = useNavigate();
 
   if (status === "loading") return null;
@@ -12,8 +12,10 @@ export default function SignupPage() {
   return (
     <AuthModal
       isLogin={false}
-      onAuthenticated={() => {
-        navigate("/login", { replace: true });
+      onAuthenticated={(token, userId) => {
+        // Signup returns a working session; adopting it avoids a forced re-login.
+        login(token, userId);
+        navigate("/chat", { replace: true });
       }}
       onToggleMode={() => navigate("/login")}
     />

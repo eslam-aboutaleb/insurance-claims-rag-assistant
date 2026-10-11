@@ -4,7 +4,10 @@ RAG Evaluation API endpoints.
 POST /api/v1/rag/evaluate - Trigger an evaluation run
     (retrieval-only, context, or end-to-end; end-to-end
     requests are mapped to context mode until an answer
-    generator is wired)
+    generator is wired). Restricted to admins: the harness
+    scores the whole corpus, not the caller's own data, so
+    the policyholder tier that reads the dataset has no
+    business launching a run.
 GET  /api/v1/rag/dataset  - List the curated evaluation queries and ground truth
 """
 
@@ -13,7 +16,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 
-from app.auth import get_current_user
+from app.auth import get_current_user, require_role
 from app.domain.evaluation import (
     Difficulty,
     EvalConfig,
@@ -42,12 +45,19 @@ router = APIRouter()
         "mapped to 'context' until an answer generator is wired). "
         "Reports retrieval quality metrics (Recall@K, Precision@K, "
         "MRR, latency) and answer quality metrics (faithfulness, "
-        "relevance, completeness, conciseness)."
+        "relevance, completeness, conciseness). "
+        "Admin-only: the harness runs against the shared retrieval "
+        "layer owned by the service, not against the caller's own "
+        "data."
     ),
     responses={
         status.HTTP_200_OK: {
             "description": "Evaluation executed successfully with metrics.",
             "model": RagEvalResponse,
+        },
+        status.HTTP_403_FORBIDDEN: {
+            "description": "The caller is not an admin.",
+            "model": ErrorResponse,
         },
         status.HTTP_500_INTERNAL_SERVER_ERROR: {
             "description": "Internal error during evaluation execution.",
@@ -60,6 +70,7 @@ async def evaluate_rag(
     payload: RagEvalRequest,
     request: Request,
     current_user_id: str = Depends(get_current_user),
+    _admin: str = Depends(require_role("admin")),
 ) -> RagEvalResponse:
     """Run RAG evaluation pipeline and return structured metrics."""
     try:

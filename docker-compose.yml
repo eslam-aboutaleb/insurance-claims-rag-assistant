@@ -3,6 +3,7 @@
 # ==============================================================================
 # Services:
 #   db       - PostgreSQL 16 database for claims, users, and conversations.
+#   redis    - Shared cache for idempotent chat responses and rate-limit counters.
 #   backend  - FastAPI backend with Google ADK agent and LiteLLM routing.
 #   frontend - React/Vite frontend served with a static file server.
 #
@@ -12,6 +13,7 @@
 #
 # Volumes:
 #   pg_data     - Persistent PostgreSQL data directory.
+#   redis_data  - Durable snapshots of the Redis cache.
 #
 # Health Checks:
 #   Each service defines a healthcheck to ensure dependencies are ready
@@ -55,6 +57,44 @@ services:
       retries: 5
 
   # ============================================================================
+  # Redis Service
+  # ============================================================================
+  # Shared state that cannot live in a single process: idempotent chat responses
+  # (so a client retry lands on any replica and still replays instead of calling
+  # the model again) and rate-limit counters (so the 20/minute chat budget is one
+  # budget for the deployment, not one per replica).
+  # Optional to run: every consumer falls back to in-process state when Redis is
+  # absent, so the stack still works without this service.
+  redis:
+    image: redis:7-alpine
+    container_name: omnicare-redis
+    restart: unless-stopped
+    ports:
+      # Loopback only, same reasoning as the database above: an operator can
+      # inspect the keyspace from the host without exposing it to the network.
+      - "127.0.0.1:${REDIS_HOST_PORT:-16379}:6379"
+    volumes:
+      # Persist database data across container restarts and recreations.
+      - redis_data:/data
+    command:
+      # A snapshot once a minute when at least one key changed, so a restart
+      # restores the replay cache instead of discarding it, and re-closes the
+      # rate-limit windows it had open rather than silently granting a fresh
+      # quota. The append-only file is off because everything stored here
+      # expires, and rewriting that log is pure overhead.
+      - redis-server
+      - --save
+      - "60"
+      - "1"
+      - --appendonly
+      - "no"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # ============================================================================
   # Backend Service
   # ============================================================================
   # FastAPI backend with Google ADK agent, LiteLLM routing, pgvector RAG,
@@ -75,10 +115,19 @@ services:
       - .env
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-omnicare}:${POSTGRES_PASSWORD}@db:5432/omnicare
+      # Empty (the default) leaves every shared store in-process. Set
+      # REDIS_URL in .env to make idempotency and rate limiting global.
+      REDIS_URL: ${REDIS_URL:-}
     depends_on:
       # Wait for the database to be healthy before starting the backend.
       db:
         condition: service_healthy
+      # The shared stores tolerate a Redis that is not up yet -- they fall back
+      # to in-process behaviour and log why -- so this waits for a healthy Redis
+      # but never blocks startup on it.
+      redis:
+        condition: service_healthy
+
     healthcheck:
       # Verify the backend health endpoint is responding.
       # The Python one-liner attempts to connect to /api/v1/health.
@@ -109,6 +158,35 @@ services:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-omnicare}:${POSTGRES_PASSWORD}@db:5432/omnicare
       EMBEDDING_DRAIN_INTERVAL_SECONDS: ${EMBEDDING_DRAIN_INTERVAL_SECONDS:-5}
       EMBEDDING_DRAIN_BATCH_SIZE: ${EMBEDDING_DRAIN_BATCH_SIZE:-10}
+    depends_on:
+      db:
+        condition: service_healthy
+      backend:
+        condition: service_started
+
+  # ============================================================================
+  # Notification Drain Worker
+  # ============================================================================
+  # Drains the `notification_jobs` outbox: renders a claim notification and
+  # materialises it in the recipient's in-app feed. Runs as its own process so
+  # delivery latency and provider failures never block a claim transition -- the
+  # API writes the job row in the claim transaction and this worker delivers it.
+  # Uses FOR UPDATE SKIP LOCKED, so additional replicas scale without coordination,
+  # and the feed's unique key on job_id keeps a redelivery from notifying twice.
+  notification-drain:
+    build:
+      # Same root context as the backend: the drainer imports ragit.
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: omnicare-notification-drain
+    restart: unless-stopped
+    command: ["python", "-m", "app.workers.notification_drain"]
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-omnicare}:${POSTGRES_PASSWORD}@db:5432/omnicare
+      NOTIFICATION_DRAIN_INTERVAL_SECONDS: ${NOTIFICATION_DRAIN_INTERVAL_SECONDS:-5}
+      NOTIFICATION_DRAIN_BATCH_SIZE: ${NOTIFICATION_DRAIN_BATCH_SIZE:-10}
     depends_on:
       db:
         condition: service_healthy
@@ -150,4 +228,7 @@ services:
 volumes:
   pg_data:
     name: omnicare_pg_data
+    driver: local
+  redis_data:
+    name: omnicare_redis_data
     driver: local

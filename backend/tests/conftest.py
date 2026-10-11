@@ -6,7 +6,14 @@ Provides fixtures for:
   - sample_claims_path: Isolated temporary copy of mock_claims.json
   - mock_current_user: Overrides the get_current_user dependency with a fixed test user ID
   - db_session: AsyncSession wrapped in an outer transaction that is rolled back
-  - _clean_database_state: autouse per-test deletion of every row in the schema
+  - _clean_database_state: autouse per-test deletion of every row in the schema,
+    run on BOTH setup and teardown
+  - _clean_database_once: the same reset, run once before the session starts
+
+The database target is resolved from OMNICARE_TEST_DATABASE_URL, then the project
+``.env``, and is refused unless the database name contains ``test``: the reset
+deletes every row in every application table, so pointing the suite at the
+database the running stack uses would destroy live development data.
 """
 
 import asyncio
@@ -178,9 +185,15 @@ def sample_claims_path(tmp_path, monkeypatch):
     """
     Fixture providing an isolated temporary copy of mock_claims.json.
 
-    Copies the baseline mock_claims.json into a temporary directory and
-    patches settings.claims_file_path so tool invocations do not affect
-    the repository's baseline data or bleed across tests.
+    Copies the baseline mock_claims.json into a temporary directory, falling
+    back to two hard-coded claims when the baseline is absent, and returns the
+    path for a test to pass to whatever reads it.
+
+    It deliberately does not patch a setting: claims live in PostgreSQL, and
+    ``Settings`` carries no claims-file field, so there is nothing to redirect.
+    The historical ``settings.claims_file_path`` patch this fixture used to
+    attempt was already a silent no-op behind its ``hasattr`` guard; the copy
+    is kept because a test that does read the file gets one it cannot mutate.
     """
     original_claims = BACKEND_DIR / "app" / "data" / "mock_claims.json"
     temp_claims = tmp_path / "mock_claims.json"
@@ -291,6 +304,16 @@ def _clear_idempotency_cache():
 
 
 _TABLES_IN_DELETE_ORDER = (
+    # Children first: every entry must precede the table its foreign key points
+    # at, or the DELETE fails and the reset silently leaves rows behind.
+    "answer_feedback",
+    "audit_events",
+    "claim_events",
+    "procedure_chunks",
+    "procedure_versions",
+    "agent_session_events",
+    "agent_sessions",
+    "eval_runs",
     "conversation_messages",
     "policy_chunks",
     "embedding_jobs",
@@ -434,16 +457,32 @@ def _clean_database_once():
 
 @pytest.fixture(scope="function", autouse=True)
 def _clean_database_state():
-    """Run every test against an empty schema.
+    """Run every test against an empty schema, and leave one behind.
 
-    Autouse and function-scoped. The reset happens once, at setup, rather than on both
-    setup and teardown: ``chat`` persists the turn with ``asyncio.create_task``, so a
-    teardown delete can land while that detached task is still writing and make the
-    following test observe a half-written state. Truncating only at setup also halves
-    the delete traffic against the shared database.
+    Autouse and function-scoped. The reset runs on BOTH setup and teardown.
+
+    Setup alone is not enough: a write that a test fires without awaiting -- a
+    drain worker picking up an outbox row, an ingestion coroutine still in
+    flight -- lands after the next test's setup wipe, referencing a user that
+    wipe already removed, and fails on a foreign key. Resetting on teardown
+    too removes that window for the common case and keeps each test's debris
+    from being visible to the next one at all.
+
+    This fixture used to reset only at setup, on the grounds that ``chat``
+    persisted turns with ``asyncio.create_task``. That is no longer true: the
+    chat endpoints await their save in the request's ``finally`` block
+    precisely so the turn is durable before the response ends
+    (``app/api/v1/chat.py``). The justification for the weaker isolation is
+    gone with it, so the isolation is restored.
+
+    Resetting at teardown cannot by itself make an in-flight detached write
+    deterministic -- nothing can, short of removing the detach. What it does
+    guarantee is that a test never *starts* by inheriting another test's rows,
+    which is the direction the suite actually depends on.
     """
     _reset_database()
     yield
+    _reset_database()
 
 
 @pytest_asyncio.fixture

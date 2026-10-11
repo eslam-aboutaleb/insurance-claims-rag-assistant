@@ -8,7 +8,9 @@
  *
  * Props:
  *   onSend: Callback invoked with the message text when the user submits.
- *   isLoading: When true, disables input and shows a spinner on the button.
+ *   isLoading: While a turn is in flight the textarea stays editable and
+ *     reports `aria-busy`, and the send button is held down so a turn cannot be
+ *     queued on top of the one already streaming.
  */
 
 import { useRef, useEffect, KeyboardEvent, useState } from "react";
@@ -29,6 +31,14 @@ export default function ChatInput({
 }: ChatInputProps) {
   const [value, setValue] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  /**
+   * Whether the composer held focus when the current turn began.
+   *
+   * Focus is restored from what was there rather than granted anew, so a
+   * composer that mounts mid-stream -- or was never focused at all -- never has
+   * the caret pulled out from under wherever the reader put it.
+   */
+  const heldFocusRef = useRef(false);
 
   // Auto-resize the textarea to fit content, up to a max height.
   useEffect(() => {
@@ -38,6 +48,20 @@ export default function ChatInput({
       textarea.style.height = `${Math.min(textarea.scrollHeight, 200)}px`;
     }
   }, [value]);
+
+  // A finished turn hands the keyboard back: the reader typed the question here
+  // and is about to type the follow-up, so the composer they were in is where
+  // the caret belongs.
+  useEffect(() => {
+    if (isLoading) {
+      heldFocusRef.current = document.activeElement === textareaRef.current;
+      return;
+    }
+    if (heldFocusRef.current) {
+      heldFocusRef.current = false;
+      textareaRef.current?.focus();
+    }
+  }, [isLoading]);
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -67,8 +91,8 @@ export default function ChatInput({
         onChange={(e) => setValue(e.target.value)}
         placeholder="Ask about coverage, claims, deductibles, or policy details..."
         onKeyDown={handleKeyDown}
-        disabled={isLoading}
-        className="w-full max-h-[200px] bg-transparent text-insurance-ink placeholder-insurance-ink-tertiary resize-none outline-none py-3 px-4 overflow-y-auto disabled:opacity-50"
+        aria-busy={isLoading}
+        className="w-full max-h-[200px] bg-transparent text-insurance-ink placeholder-insurance-ink-tertiary resize-none outline-none py-3 px-4 overflow-y-auto"
         data-testid="chat-textarea"
         autoFocus={autoFocus}
         aria-label="Chat message input"

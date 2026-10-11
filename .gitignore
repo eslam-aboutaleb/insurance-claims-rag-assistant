@@ -32,6 +32,7 @@ __pycache__/
 *.py[cod]
 *$py.class
 *.so
+.local/
 .Python
 build/
 develop-eggs/
@@ -154,3 +155,9 @@ test-results/
 *.log
 logs/
 log/
+# pip/wheel cache left by tooling bootstrapped inside a container
+.cache/
+backend/.cache/
+
+# TypeScript incremental build state (rewritten by `tsc --noEmit`)
+*.tsbuildinfo

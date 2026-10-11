@@ -3,6 +3,8 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
+from app.agent.conversation_store import SavedMessageIds
+
 
 @pytest.mark.asyncio
 async def test_chat_stream_empty_message(test_client, mock_current_user):
@@ -123,6 +125,12 @@ async def test_chat_stream_creates_conversation_visible_in_sidebar(
         ) as mock_persist,
     ):
         mock_run_agent_stream.side_effect = mock_run
+        # The terminal frame reads the ids off the return value, so the mock
+        # must hand back the same shape the real helper returns.
+        mock_persist.return_value = SavedMessageIds(
+            user_message_id="11111111-1111-1111-1111-111111111111",
+            assistant_message_id="22222222-2222-2222-2222-222222222222",
+        )
 
         response = test_client.post(
             "/api/v1/auth/signup",
@@ -137,3 +145,6 @@ async def test_chat_stream_creates_conversation_visible_in_sidebar(
         )
         assert response2.status_code == 200
         mock_persist.assert_awaited_once()
+        # The ids the persistence reported ride on the terminal frame.
+        assert "22222222-2222-2222-2222-222222222222" in response2.text
+        assert "11111111-1111-1111-1111-111111111111" in response2.text

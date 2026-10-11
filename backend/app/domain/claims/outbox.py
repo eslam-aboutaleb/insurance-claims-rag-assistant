@@ -334,6 +334,17 @@ async def enqueue_embedding_job(  # noqa: PLR0913, PLR0917
     caller's commit. When ``session`` is None, ragit opens
     and commits its own transaction.
 
+    A failure to enqueue is logged and never raised when this function owns the
+    transaction: the claim it describes is already durable, and failing a
+    committed fact to protect an index would trade one for the other.
+
+    When ``session`` is supplied the situation is the opposite. The job row has
+    only been *flushed*, not committed, so a flush failure has already poisoned
+    the caller's transaction: its next ``commit()`` raises
+    ``PendingRollbackError`` with a traceback that says nothing about the real
+    cause. Re-raising here lets the caller fail on the actual error instead of a
+    misleading one several statements later.
+
     Args:
         claim_uuid: Internal UUID of the claim row.
         claim_id: Human-readable claim identifier.
@@ -360,6 +371,8 @@ async def enqueue_embedding_job(  # noqa: PLR0913, PLR0917
         await enqueue_job(store, payload, session=session)
         logger.info("Enqueued embedding job for claim '%s'.", claim_id)
     except Exception as exc:
+        if session is not None:
+            raise
         logger.exception("Failed to enqueue embedding job for claim '%s': %s", claim_id, exc)
 
 

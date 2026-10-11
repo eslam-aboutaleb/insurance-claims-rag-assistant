@@ -1,0 +1,102 @@
+name: RAG Eval Gate
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "backend/app/**"
+      - "backend/tests/**"
+      - "backend/pyproject.toml"
+      - ".github/workflows/rag-eval.yml"
+  pull_request:
+    paths:
+      - "backend/app/**"
+      - "backend/tests/**"
+      - "backend/pyproject.toml"
+      - ".github/workflows/rag-eval.yml"
+  workflow_dispatch:
+
+# Two concurrent runs would have two workflows truncating the same policy_chunks
+# table and two sets of eval_runs rows attributed to two different commits.
+# Cancelling the stale one keeps the result attributable to a single commit.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  rag-eval-gate:
+    name: Retrieval and refusal quality gate
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+
+    # PostgreSQL with pgvector, so the gate exercises the same hybrid search the
+    # product uses: real vector distance search and real tsvector BM25, fused
+    # by reciprocal rank. Nothing about the retrieval path is mocked except the
+    # embedding provider, which has to be deterministic to keep the gate keyless.
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: omnicare
+          POSTGRES_PASSWORD: omnicare_password
+          # The name carries "test" because the suite's reset fixture refuses to
+          # truncate anything else; see tests/conftest.py.
+          POSTGRES_DB: omnicare_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U omnicare_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      OMNICARE_TEST_DATABASE_URL: postgresql+asyncpg://omnicare:omnicare_password@localhost:5432/omnicare_test
+      DATABASE_URL: postgresql+asyncpg://omnicare:omnicare_password@localhost:5432/omnicare_test
+      JWT_SECRET_KEY: ci-only-not-a-real-secret-32chars-min
+      ENVIRONMENT: test
+      # Deliberately blank, and it stays blank: the gate is keyless by design, so
+      # a credential left in the environment would silently turn this job into a
+      # paid one. The live end-to-end run is a separate, explicitly opted-in job.
+      OPENAI_API_KEY: ""
+      OMNICARE_EVAL_LIVE: ""
+      OMNICARE_EVAL_PERSIST: "0"
+      OMNICARE_GIT_SHA: ${{ github.sha }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install backend dependencies
+        run: |
+          python -m pip install --upgrade pip
+          # ragit is pinned as a git dependency in pyproject.toml, so the project
+          # is installed rather than a requirements file.
+          pip install -e .
+          pip install ruff
+
+      - name: Lint and format the evaluation harness
+        run: |
+          ruff check app/domain/evaluation.py app/domain/evaluation_cli.py \
+            app/domain/evaluation_runs.py tests/test_eval_gate.py
+          ruff format --check app/domain/evaluation.py app/domain/evaluation_cli.py \
+            app/domain/evaluation_runs.py tests/test_eval_gate.py
+
+      - name: Apply database migrations
+        run: alembic upgrade head
+
+      - name: Run the RAG evaluation quality gate
+        # Only this file, on purpose. The harness truncates the policy index
+        # before every test, so running the rest of the suite in the same job
+        # would let the two halves overwrite each other and a failure would mean
+        # nothing. The full suite runs in its own workflow.
+        #
+        # A floor breach fails the build with the regressing samples named, so
+        # the failure message is the diff that has to be read.
+        run: pytest tests/test_eval_gate.py -q -p no:randomly

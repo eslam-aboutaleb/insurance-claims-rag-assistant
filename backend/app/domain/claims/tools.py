@@ -22,13 +22,39 @@ from app.domain.claims.retriever import retrieve_claims_hybrid
 logger = logging.getLogger(__name__)
 
 
-async def search_claims(query: str, n_results: int = 5) -> list[dict[str, Any]]:
+def _to_context_result(result: dict[str, Any]) -> dict[str, Any]:
+    """Project one raw retrieval row onto the LLM-facing envelope.
+
+    ``owner_id`` is the caller's own raw user UUID — already implied by the
+    retrieval scoping — and ``_rrf_score`` plus ``distance`` are internal
+    ranking signals; none of them help the model answer, so they are dropped.
+
+    Args:
+        result: Raw retrieval row with ``document``, ``metadata``,
+            ``distance``, and ``_rrf_score`` keys.
+
+    Returns:
+        dict: The row with ``document``, sanitized ``metadata``, and a
+        ``citation`` string in the same shape ``get_claim_status`` returns.
+    """
+    metadata = dict(result.get("metadata") or {})
+    metadata.pop("owner_id", None)
+    metadata.pop("_rrf_score", None)
+    claim_id = metadata.get("claim_id", "")
+    policy_number = metadata.get("policy_number", "")
+    return {
+        "document": result.get("document", ""),
+        "metadata": metadata,
+        "citation": f"Claim {claim_id} in the OmniCare claims system (policy {policy_number}).",
+    }
+
+
+async def search_claims(query: str, n_results: int = 5) -> dict[str, Any]:
     """
     Search claims using hybrid search (vector + keyword).
 
-    Use this tool when the user asks about their claims,
-    claim status, claim history, or any question that
-    requires looking up claim information.
+    Use this tool when the user asks about their claims, claim status,
+    claim history, or mentions a claim without giving its ID.
 
     The search combines:
     - Vector similarity search (pgvector) for semantic matching
@@ -41,26 +67,27 @@ async def search_claims(query: str, n_results: int = 5) -> list[dict[str, Any]]:
         n_results: Maximum number of results to return (default: 5).
 
     Returns:
-        list[dict]: List of search results, each containing:
-            - document: The text content of the matching claim
-            - metadata: Dict with claim_id, policy_number, claim_type,
-              status, amount, description, owner_id
-            - distance: Vector distance (lower is closer)
-            - _rrf_score: Combined RRF relevance score
-
-        Returns list with error/message dict if:
-            - User is not authenticated (returns unauthorized error)
-            - No results found (returns message)
-            - Search fails (returns error message)
+        dict: An envelope with the keys:
+            - results: List of matches, each with ``document``, ``metadata``
+              (claim_id, policy_number, claim_type, status, amount,
+              description), and ``citation``.
+            - count: Number of matches in ``results``.
+            - message: Set (with empty ``results``) when the search succeeded
+              but found no matching claim.
+            - error: Set (with empty ``results``) when the lookup itself
+              failed or the caller is not authenticated.
 
     Examples:
         >>> # Search for claim status
-        >>> results = await search_claims("water damage claim status")
-        >>> if results and "error" not in results[0]:
-        ...     print(f"Found {len(results)} claims")
-        ...     for r in results:
+        >>> envelope = await search_claims("water damage claim status")
+        >>> if envelope["error"]:
+        ...     print("The lookup failed:", envelope["error"])
+        ... elif envelope["message"]:
+        ...     print("No matching claim:", envelope["message"])
+        ... else:
+        ...     for r in envelope["results"]:
         ...         print(f"Claim: {r['metadata']['claim_id']}")
-        ...         print(f"Status: {r['metadata']['status']}")
+        ...         print(f"Citation: {r['citation']}")
     """
     # Resolved at call time so importing this module never
     # cycles through app.agent (the agent imports this tool
@@ -71,13 +98,33 @@ async def search_claims(query: str, n_results: int = 5) -> list[dict[str, Any]]:
         user_uuid = current_user_id.get()
     except LookupError:
         logger.error("current_user_id not found in context during claims search.")
-        return [{"error": "Unauthorized claim search."}]
+        return {
+            "results": [],
+            "count": 0,
+            "message": None,
+            "error": "Unauthorized claim search.",
+        }
 
     try:
         results = await retrieve_claims_hybrid(query=query, user_id=user_uuid, n_results=n_results)
         if not results:
-            return [{"message": "No relevant claims found matching your search."}]
-        return results
+            return {
+                "results": [],
+                "count": 0,
+                "message": "No relevant claims found matching your search.",
+                "error": None,
+            }
+        return {
+            "results": [_to_context_result(result) for result in results],
+            "count": len(results),
+            "message": None,
+            "error": None,
+        }
     except Exception as exc:
         logger.exception("Error during hybrid claims search: %s", exc)
-        return [{"error": "Unable to search claims at this time. Please try again later."}]
+        return {
+            "results": [],
+            "count": 0,
+            "message": None,
+            "error": "Unable to search claims at this time. Please try again later.",
+        }
