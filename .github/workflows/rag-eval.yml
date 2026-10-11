@@ -47,7 +47,7 @@ jobs:
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U omnicare_test"
+          --health-cmd "pg_isready -U omnicare"
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
@@ -79,7 +79,13 @@ jobs:
           # ragit is pinned as a git dependency in pyproject.toml, so the project
           # is installed rather than a requirements file.
           pip install -e .
-          pip install ruff
+          # Pinned to the same revision .pre-commit-config.yaml pins. An unpinned
+          # install resolves to whatever is newest on the day, and every minor
+          # ruff release promotes new rules (SIM905, PLR0917) that the repo's
+          # ruff.toml select list then picks up -- so the gate would fail on a
+          # toolchain bump the project never adopted, and pre-commit would keep
+          # passing because it resolves the pinned build.
+          pip install ruff==0.6.9
 
       - name: Lint and format the evaluation harness
         run: |
