@@ -72,7 +72,9 @@ describe("SourcesBadge", () => {
       />,
     );
 
-    expect(screen.getByTestId("sources-count")).toHaveTextContent("Sources (2)");
+    expect(screen.getByTestId("sources-count")).toHaveTextContent(
+      "Sources (2)",
+    );
     expect(screen.getByTestId("sources-toggle")).toHaveAttribute(
       "aria-expanded",
       "false",

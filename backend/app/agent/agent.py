@@ -750,6 +750,39 @@ async def reset_user_session(user_id: str) -> None:
             )
 
 
+async def delete_user_session(user_id: str, session_id: str) -> None:
+    """Delete one specific session belonging to a user.
+
+    Unlike ``reset_user_session``, which clears whichever session is currently
+    active, this targets a single stored session by id. A deleted conversation
+    takes its agent session with it, so the next message cannot resume -- and
+    cite from -- a transcript the user has already deleted.
+
+    Args:
+        user_id: The user identifier that owns the session.
+        session_id: The stored session id to delete.
+
+    Returns:
+        None
+    """
+    if _user_sessions.get(user_id) == session_id:
+        _user_sessions.pop(user_id, None)
+    try:
+        await _session_service().delete_session(
+            app_name=APP_NAME,
+            user_id=user_id,
+            session_id=session_id,
+        )
+        logger.debug("Deleted session '%s' for user '%s'.", session_id, user_id)
+    except Exception as e:
+        logger.warning(
+            "Failed to delete session '%s' for user '%s': %s",
+            session_id,
+            user_id,
+            e,
+        )
+
+
 def _format_sources(sources: list[str | dict[str, Any]]) -> list[str]:
     """Normalize tool sources into display-ready strings.
 

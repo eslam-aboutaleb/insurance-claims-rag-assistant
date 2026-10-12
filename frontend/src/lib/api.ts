@@ -21,7 +21,12 @@
  *   the deployed backend origin.
  */
 
-import { ChatResponse, ADKSSEEvent, ToolCall } from "@/types/chat";
+import {
+  ChatResponse,
+  ADKSSEEvent,
+  ToolCall,
+  ConversationMeta,
+} from "@/types/chat";
 import {
   ChatResponseSchema,
   ConversationMetaSchema,
@@ -296,16 +301,33 @@ export async function resetChat(token: string | null): Promise<void> {
 
 /**
  * Fetch the list of past conversations for the authenticated user.
+ *
+ * @param token - The authenticated user's bearer token.
+ * @param query - Optional title substring. The server matches it
+ *   case-insensitively and is appended as ``?q=`` only when it is given.
+ * @param signal - Optional abort signal for the request.
+ * @returns The caller's conversations, most recently updated first.
+ * @throws ApiError On a failed or cancelled request.
  */
-export async function getConversations(token: string, signal?: AbortSignal) {
+export async function getConversations(
+  token: string,
+  query?: string,
+  signal?: AbortSignal,
+) {
   const apiUrl = getApiUrl();
 
   try {
-    const response = await fetch(`${apiUrl}/api/v1/chat/conversations`, {
-      credentials: "include",
-      headers: { Authorization: `Bearer ${token}` },
-      signal,
-    });
+    // An empty query stays off the URL, so the unfiltered request is exactly
+    // the one the endpoint has always served for this call.
+    const search = query ? `?q=${encodeURIComponent(query)}` : "";
+    const response = await fetch(
+      `${apiUrl}/api/v1/chat/conversations${search}`,
+      {
+        credentials: "include",
+        headers: { Authorization: `Bearer ${token}` },
+        signal,
+      },
+    );
 
     if (response.ok) {
       return parseResponse(response, (d) => ({
@@ -322,6 +344,100 @@ export async function getConversations(token: string, signal?: AbortSignal) {
     }
     throw new ApiError(
       "Something went wrong. Please try again later.",
+      0,
+      "NETWORK_ERROR",
+    );
+  }
+}
+
+/**
+ * Rename one of the authenticated user's conversations.
+ *
+ * @param token - The authenticated user's bearer token.
+ * @param id - The conversation to rename.
+ * @param title - The new title. The backend trims it and refuses one that is
+ *   empty or longer than the stored column.
+ * @param signal - Optional abort signal for the request.
+ * @returns The conversation's metadata after the rename, carrying the title
+ *   the server stored.
+ * @throws ApiError On a conversation the caller does not own, a rejected
+ *   title, or a transport failure, which leaves the stored title untouched.
+ */
+export async function renameConversation(
+  token: string,
+  id: string,
+  title: string,
+  signal?: AbortSignal,
+): Promise<ConversationMeta> {
+  const apiUrl = getApiUrl();
+
+  try {
+    const response = await fetch(`${apiUrl}/api/v1/chat/conversations/${id}`, {
+      method: "PATCH",
+      credentials: "include",
+      // The JSON content type is not optional: a string body without it is
+      // sent as text/plain, and the backend only parses a JSON body when the
+      // request says it is carrying one.
+      headers: buildAuthHeaders(token),
+      body: JSON.stringify({ title }),
+      signal,
+    });
+
+    if (response.ok) {
+      return parseResponse(response, ConversationMetaSchema.parse);
+    }
+    throw await parseResponse(response, (d) => d);
+  } catch (error) {
+    if (error instanceof ApiError) throw error;
+    if ((error as Error).name === "AbortError") {
+      throw new ApiError("Request cancelled", 0, "CANCELLED");
+    }
+    throw new ApiError(
+      "We could not reach the server, so the title was not saved.",
+      0,
+      "NETWORK_ERROR",
+    );
+  }
+}
+
+/**
+ * Delete one of the authenticated user's conversations together with its
+ * messages.
+ *
+ * @param token - The authenticated user's bearer token.
+ * @param id - The conversation to delete.
+ * @param signal - Optional abort signal for the request.
+ * @returns Nothing on success; the conversation and its messages are gone.
+ * @throws ApiError On a conversation the caller does not own or a transport
+ *   failure, which leaves the stored conversation untouched.
+ */
+export async function deleteConversation(
+  token: string,
+  id: string,
+  signal?: AbortSignal,
+): Promise<void> {
+  const apiUrl = getApiUrl();
+
+  try {
+    const response = await fetch(`${apiUrl}/api/v1/chat/conversations/${id}`, {
+      method: "DELETE",
+      credentials: "include",
+      headers: { Authorization: `Bearer ${token}` },
+      signal,
+    });
+
+    // The success response carries no JSON body to read.
+    if (response.status === 204) {
+      return;
+    }
+    throw await parseResponse(response, (d) => d);
+  } catch (error) {
+    if (error instanceof ApiError) throw error;
+    if ((error as Error).name === "AbortError") {
+      throw new ApiError("Request cancelled", 0, "CANCELLED");
+    }
+    throw new ApiError(
+      "We could not reach the server, so the conversation was not deleted.",
       0,
       "NETWORK_ERROR",
     );

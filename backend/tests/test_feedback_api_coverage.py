@@ -203,9 +203,7 @@ class TestInvalidUserId:
 class TestWithdrawalAudit:
     """Withdrawing leaves an append-only row behind the delete."""
 
-    def test_the_withdrawal_row_records_what_was_reversed(
-        self, test_client: TestClient
-    ):
+    def test_the_withdrawal_row_records_what_was_reversed(self, test_client: TestClient):
         """The row names the action, the message, the actor, and what was taken back.
 
         Once the rating row is gone, "never rated it" and "withdrew a rating"
@@ -225,8 +223,7 @@ class TestWithdrawalAudit:
             == 201
         )
         assert (
-            test_client.delete(f"/api/v1/feedback/{message_id}", headers=headers).status_code
-            == 204
+            test_client.delete(f"/api/v1/feedback/{message_id}", headers=headers).status_code == 204
         )
 
         entries = _audit_rows(message_id)
@@ -252,8 +249,7 @@ class TestWithdrawalAudit:
         _seed_answers([(owner_id, message_id, "Collision covers your own car.")])
 
         assert (
-            test_client.delete(f"/api/v1/feedback/{message_id}", headers=headers).status_code
-            == 204
+            test_client.delete(f"/api/v1/feedback/{message_id}", headers=headers).status_code == 204
         )
         assert _rating_rows(message_id) == []
 

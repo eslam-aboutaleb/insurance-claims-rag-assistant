@@ -21,7 +21,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 # --- Chat Schemas --------------------------------------------------------
 
@@ -371,6 +371,35 @@ class ConversationDetailResponse(ConversationMetadata):
     """
 
     messages: list[dict[str, Any]]
+
+
+class ConversationRenameRequest(BaseModel):
+    """Request schema for renaming a conversation.
+
+    Attributes:
+        title: The new title, stored trimmed. The 1-255 bounds mirror the
+            ``conversations.title`` column, so an over-long title is refused by
+            validation instead of by the database.
+    """
+
+    title: str = Field(..., min_length=1, max_length=255)
+
+    @field_validator("title", mode="before")
+    @classmethod
+    def _trim_title(cls, value: str) -> str:
+        """Trim the title before the length bounds are applied.
+
+        Trimming first means the stored title is what the user sees rather
+        than the string they typed, and a title made only of whitespace is
+        refused as empty instead of surviving as a blank row.
+
+        Args:
+            value: The raw title from the request body.
+
+        Returns:
+            str: The title without surrounding whitespace.
+        """
+        return value.strip() if isinstance(value, str) else value
 
 
 class UserMe(BaseModel):

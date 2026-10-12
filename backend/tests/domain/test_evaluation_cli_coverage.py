@@ -676,8 +676,7 @@ class TestFormatSamples:
     def test_at_most_the_limit_samples_are_listed(self):
         """A long result is truncated to the limit, and the header says so."""
         samples = [
-            {"query": f"question {index}", "recall": index / 100, "mrr": 0.0}
-            for index in range(10)
+            {"query": f"question {index}", "recall": index / 100, "mrr": 0.0} for index in range(10)
         ]
 
         rendered = format_samples(_result(per_sample_results=samples), _catalogue(), limit=3)

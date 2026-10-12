@@ -325,7 +325,9 @@ describe("MessageBubble", () => {
     expect(
       screen.queryByRole("button", { name: COPY_LABEL }),
     ).not.toBeInTheDocument();
-    expect(screen.queryByTestId(`assistant-text-bare-1`)).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId(`assistant-text-bare-1`),
+    ).not.toBeInTheDocument();
     expect(screen.getByTestId("message-time-bare-1")).toBeInTheDocument();
     expect(screen.getByTestId("avatar-bare-1")).toBeInTheDocument();
   });
@@ -339,7 +341,9 @@ describe("MessageBubble", () => {
     );
 
     expect(screen.getByTestId("message-bubble-bare-2")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: COPY_LABEL })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: COPY_LABEL }),
+    ).toBeInTheDocument();
   });
 
   it("shows a caret at the end of the content while it is still streaming", () => {
@@ -355,7 +359,9 @@ describe("MessageBubble", () => {
     // The same pulse utility the typing dots use, which the reduced-motion
     // block in globals.css cancels for both.
     expect(caret.className).toContain("animate-pulse");
-    expect(caret.parentElement).toBe(screen.getByTestId("assistant-text-live-1"));
+    expect(caret.parentElement).toBe(
+      screen.getByTestId("assistant-text-live-1"),
+    );
   });
 
   it("leaves the caret out of a message that is not streaming", () => {

@@ -21,7 +21,6 @@ from fastapi.testclient import TestClient
 from app.auth import get_current_user
 from app.database import async_session_factory, engine
 from app.models.notification_job import JOB_TYPE_CLAIM_STATUS_CHANGED, Notification, NotificationJob
-from app.models.user import User
 
 _TEST_PASSWORD = "NotifyCoverage123!"  # noqa: S105 - fixture credential, not a secret
 _PINNED_EPOCH = datetime(2026, 5, 1, tzinfo=UTC)
@@ -221,9 +220,7 @@ class TestPaginationBounds:
         """The bounds are on the query, so a caller learns them as a 422."""
         _, headers = _signup(test_client, "notify_cov_bounds")
 
-        over_long = test_client.get(
-            "/api/v1/notifications", params={"limit": 51}, headers=headers
-        )
+        over_long = test_client.get("/api/v1/notifications", params={"limit": 51}, headers=headers)
         empty_page = test_client.get("/api/v1/notifications", params={"limit": 0}, headers=headers)
         negative_offset = test_client.get(
             "/api/v1/notifications", params={"offset": -1}, headers=headers

@@ -59,7 +59,9 @@ function mockAuthStatus(status: AuthStatus): void {
   });
 }
 
-function renderAuthModal(props: Partial<ComponentProps<typeof AuthModal>> = {}) {
+function renderAuthModal(
+  props: Partial<ComponentProps<typeof AuthModal>> = {},
+) {
   const onAuthenticated = vi.fn();
   const onToggleMode = vi.fn();
   render(
@@ -142,9 +144,7 @@ describe("AuthModal field semantics", () => {
 
     expect(screen.getByLabelText("Email")).toBeInTheDocument();
     expect(screen.getByLabelText("Password")).toBeInTheDocument();
-    expect(
-      screen.queryByLabelText("Confirm password"),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Confirm password")).not.toBeInTheDocument();
   });
 
   it("renders as a page landmark with a single top-level heading", () => {
@@ -235,7 +235,10 @@ describe("SignupPage auto-authentication", () => {
         <Routes>
           <Route path="/signup" element={<SignupPage />} />
           <Route path="/login" element={<LoginPage />} />
-          <Route path="/chat" element={<div data-testid="chat-destination" />} />
+          <Route
+            path="/chat"
+            element={<div data-testid="chat-destination" />}
+          />
         </Routes>
       </MemoryRouter>,
     );

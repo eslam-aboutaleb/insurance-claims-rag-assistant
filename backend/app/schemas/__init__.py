@@ -13,6 +13,7 @@ from app.schemas.models import (
     ConversationDetailResponse,
     ConversationListResponse,
     ConversationMetadata,
+    ConversationRenameRequest,
     ErrorDetail,
     ErrorResponse,
     HealthResponse,
@@ -34,4 +35,5 @@ __all__ = [
     "ConversationMetadata",
     "ConversationListResponse",
     "ConversationDetailResponse",
+    "ConversationRenameRequest",
 ]

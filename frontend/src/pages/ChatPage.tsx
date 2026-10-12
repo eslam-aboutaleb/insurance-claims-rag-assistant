@@ -1,10 +1,66 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Navigate, useParams, useNavigate } from "react-router-dom";
 import Sidebar from "@/components/Sidebar";
 import ChatWindow from "@/components/ChatWindow";
 import { toast } from "react-hot-toast";
 import { useAuth } from "@/context/AuthContext";
 import { resetChat } from "@/lib/api";
+
+/**
+ * Width below which the sidebar covers the transcript instead of sitting
+ * beside it.
+ *
+ * It has to match the ``md`` breakpoint the layout is already built on: the
+ * off-canvas sidebar is hidden with a transform, which leaves nothing in the
+ * DOM that says whether it is on screen, so the media query is the only
+ * statement of that fact there is. If the two ever disagree, an element that is
+ * visible gets marked inert and becomes unusable.
+ */
+const MOBILE_MEDIA_QUERY = "(max-width: 767px)";
+
+/**
+ * Read the phone-layout flag without assuming the environment has a media
+ * engine.
+ *
+ * A jsdom-style runtime without ``matchMedia`` reports the wider layout, which
+ * is the safe answer: it is the layout where neither the sidebar nor the
+ * transcript is taken out of the accessibility tree.
+ *
+ * @returns True while the phone layout is active.
+ */
+function readIsMobileViewport(): boolean {
+  if (
+    typeof window === "undefined" ||
+    typeof window.matchMedia !== "function"
+  ) {
+    return false;
+  }
+  return window.matchMedia(MOBILE_MEDIA_QUERY).matches;
+}
+
+/**
+ * Whether the viewport is currently phone-width, kept current across resizes.
+ *
+ * @returns True while the phone layout is active.
+ */
+function useIsMobileViewport(): boolean {
+  const [isMobile, setIsMobile] = useState(readIsMobileViewport);
+
+  useEffect(() => {
+    if (
+      typeof window === "undefined" ||
+      typeof window.matchMedia !== "function"
+    ) {
+      return;
+    }
+    const query = window.matchMedia(MOBILE_MEDIA_QUERY);
+    const onChange = (event: MediaQueryListEvent) => setIsMobile(event.matches);
+    query.addEventListener("change", onChange);
+    return () => query.removeEventListener("change", onChange);
+  }, []);
+
+  return isMobile;
+}
 
 export default function ChatPage() {
   const touchStartX = useRef<number | null>(null);
@@ -15,10 +71,30 @@ export default function ChatPage() {
   const { conversationId } = useParams<{ conversationId?: string }>();
   const navigate = useNavigate();
   const [historyLoadError, setHistoryLoadError] = useState<string | null>(null);
+  const isMobileViewport = useIsMobileViewport();
+
+  /**
+   * The closed sidebar is off-canvas on a phone and a permanent rail on a wider
+   * screen, so only the former is hidden from assistive technology and taken
+   * out of the tab order: on desktop the same markup is fully visible.
+   *
+   * ``inert`` is passed as the empty string rather than a boolean because that
+   * is the form the DOM attribute takes, and React renders it verbatim.
+   */
+  const sidebarIsOffCanvas = isMobileViewport && !sidebarOpen;
+  const sidebarAttributes = sidebarIsOffCanvas
+    ? ({ inert: "", "aria-hidden": "true" } as const)
+    : {};
+
+  /** Symmetrically, the transcript is behind the drawer while it is open on a phone. */
+  const chatAttributes =
+    isMobileViewport && sidebarOpen
+      ? ({ inert: "", "aria-hidden": "true" } as const)
+      : {};
 
   if (status === "loading") {
     return (
-      <div className="flex h-full w-full items-center justify-center bg-sand-50">
+      <div className="flex h-full w-full items-center justify-center">
         <div className="flex flex-col items-center gap-3">
           <div className="w-8 h-8 border-2 border-insurance-info border-t-transparent rounded-full animate-spin" />
           <span className="text-sm text-insurance-ink-secondary">
@@ -57,10 +133,18 @@ export default function ChatPage() {
     setHistoryLoadError(message);
   };
 
+  const handleDeleteConversation = (id: string) => {
+    // The transcript the user is reading is gone, so the page leaves it rather
+    // than holding a view whose history would 404 on the next load.
+    if (id !== conversationId) return;
+    setHistoryLoadError(null);
+    navigate("/chat", { replace: true });
+  };
+
   return (
     <main
       id="app-main"
-      className="flex h-full w-full overflow-hidden bg-sand-50"
+      className="flex h-full w-full overflow-hidden"
       data-testid="app-main"
     >
       <div
@@ -69,6 +153,7 @@ export default function ChatPage() {
           sidebarOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"
         } w-[272px]`}
         data-testid="sidebar-container"
+        {...sidebarAttributes}
         onTouchStart={(e) => {
           const touch = e.touches[0];
           touchStartX.current = touch.clientX;
@@ -86,27 +171,10 @@ export default function ChatPage() {
           onSelectChat={handleSelectChat}
           refreshTrigger={refreshTrigger}
           activeConversationId={conversationId}
+          onDeleteConversation={handleDeleteConversation}
         />
       </div>
 
-      {historyLoadError && (
-        <div className="absolute inset-0 flex items-center justify-center bg-sand-50/80 z-10">
-          <div className="max-w-sm text-center p-4 bg-insurance-surface border border-insurance-border rounded-xl shadow-medium">
-            <div className="text-sm font-medium text-insurance-ink mb-1">
-              Failed to load conversation
-            </div>
-            <div className="text-xs text-insurance-ink-secondary mb-3">
-              {historyLoadError}
-            </div>
-            <button
-              onClick={() => navigate("/chat")}
-              className="px-3 py-2 bg-insurance-info text-white text-xs font-medium rounded-lg hover:bg-insurance-ink-secondary transition-colors"
-            >
-              Start a new chat
-            </button>
-          </div>
-        </div>
-      )}
       {sidebarOpen && (
         <div
           id="sidebar-overlay"
@@ -120,9 +188,35 @@ export default function ChatPage() {
       <div
         id="chat-container"
         className="flex-1 flex flex-col h-full relative"
-        {...(sidebarOpen ? { inert: true } : {})}
+        {...chatAttributes}
         data-testid="chat-container"
       >
+        {/* Scoped to the chat area rather than the whole page: a failed history
+            load must not blind the sidebar, because opening another
+            conversation is how the reader gets out of it. It sits before the
+            menu button so that, at equal stacking, the button still paints on
+            top and keeps the drawer reachable. */}
+        {historyLoadError && (
+          <div
+            className="absolute inset-0 flex items-center justify-center bg-insurance-bg/80 z-10"
+            data-testid="history-load-error"
+          >
+            <div className="max-w-sm text-center p-4 bg-insurance-surface border border-insurance-border rounded-xl shadow-medium">
+              <div className="text-sm font-medium text-insurance-ink mb-1">
+                Failed to load conversation
+              </div>
+              <div className="text-xs text-insurance-ink-secondary mb-3">
+                {historyLoadError}
+              </div>
+              <button
+                onClick={() => navigate("/chat")}
+                className="px-3 py-2 bg-insurance-info text-white text-xs font-medium rounded-lg hover:bg-insurance-ink-secondary transition-colors"
+              >
+                Start a new chat
+              </button>
+            </div>
+          </div>
+        )}
         <div
           id="mobile-menu-button"
           className="absolute top-0 left-0 p-4 md:hidden z-10"
@@ -155,7 +249,7 @@ export default function ChatPage() {
           onNewChat={handleNewChat}
           historyId={conversationId}
           onMessageSent={() => setRefreshTrigger((p) => p + 1)}
-          onAuthError={logout}
+          onAuthError={() => logout("expired")}
           onHistoryLoaded={handleHistoryLoaded}
           onHistoryLoadError={handleHistoryLoadError}
         />
