@@ -350,6 +350,10 @@ async def _delete_all_rows() -> None:
     tables that other suites seed, which hides ordering bugs instead of
     surfacing them.
 
+    Tables absent from the target database are skipped, so the reset works
+    against any schema shape rather than only one that the application has
+    already booted against.
+
     A bounded ``lock_timeout`` turns a blocked statement into a fast failure.
     The reset runs in its own transaction, so a timeout rolls back cleanly and
     leaves no partial state for the next attempt.
@@ -360,7 +364,24 @@ async def _delete_all_rows() -> None:
 
     async with async_session_factory() as session:
         await session.execute(text("SET LOCAL lock_timeout = '5s'"))
+        present = {
+            row[0]
+            for row in (
+                await session.execute(
+                    text(
+                        "SELECT table_name FROM information_schema.tables "
+                        "WHERE table_schema = current_schema()"
+                    )
+                )
+            )
+        }
         for table in _TABLES_IN_DELETE_ORDER:
+            if table not in present:
+                # Absent, not stale: the reset's contract is "these rows are
+                # gone afterwards", which a table that does not exist already
+                # satisfies. A test that genuinely needs it queries it and
+                # fails loudly on its own, so this hides nothing.
+                continue
             # Table names come from the fixed tuple above, never from test input.
             await session.execute(text(f'DELETE FROM "{table}"'))  # noqa: S608
         await session.execute(text(_RESTART_SEQUENCES_SQL))
