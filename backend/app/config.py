@@ -186,6 +186,51 @@ class Settings(BaseSettings):
             "the same data."
         ),
     )
+    # LangSmith tracing.
+    # Off by default for two reasons: it ships prompts and responses to a
+    # third-party service, and it needs a key to do anything at all. With it on
+    # and no key configured, tracing stays off and startup says so, so a
+    # Deployment that means to trace cannot silently run untraced.
+    langsmith_tracing_enabled: bool = Field(
+        default=False,
+        description=(
+            "Whether agent turns are traced to LangSmith: one trace per turn with the "
+            "model calls and tool calls it made nested under it, viewable at "
+            "smith.langchain.com. Off by default; requires LANGSMITH_API_KEY to take "
+            "effect, and is gated by OBSERVABILITY_ENABLED like every other hook."
+        ),
+    )
+    langsmith_api_key: str = Field(
+        default="",
+        description=(
+            "LangSmith API key (starts with 'lsv2_'). Created under Settings > API Keys "
+            "in the LangSmith app. Blank leaves tracing off even when "
+            "LANGSMITH_TRACING_ENABLED=true."
+        ),
+    )
+    langsmith_project: str = Field(
+        default="omnicare-financial",
+        description=(
+            "LangSmith project (the traces' grouping inside the workspace) that runs "
+            "are reported to. Created on demand by LangSmith on the first traced run."
+        ),
+    )
+    langsmith_endpoint: str = Field(
+        default="",
+        description=(
+            "LangSmith API base URL. Blank uses the LangSmith cloud "
+            "(https://api.smith.langchain.com); set it to the URL of a self-hosted or "
+            "region-specific deployment."
+        ),
+    )
+    langsmith_workspace_id: str = Field(
+        default="",
+        description=(
+            "Optional LangSmith workspace (organization) id for keys scoped to one "
+            "workspace of a multi-workspace organization. Blank works for the common "
+            "single-workspace case."
+        ),
+    )
     log_format: Literal["json", "text"] = Field(
         default="json",
         description=(

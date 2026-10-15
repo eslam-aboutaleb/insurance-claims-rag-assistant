@@ -166,6 +166,13 @@ Powered by **Google Agent Development Kit (ADK)** and **LiteLLM**, the assistant
 - **Auto-generated Titles**: Conversation titles derived from the first user message
 - **FIFO Session Eviction**: ADK sessions are bounded (max 500) with automatic eviction of oldest sessions
 
+### Observability & Tracing
+
+- **Structured Logs with Correlation Ids**: One JSON object per line, each keyed by the request's `X-Request-ID`, so a single user turn is followable across services
+- **Per-Call Unit Economics**: Every model call records tokens, dollar cost, and latency; every tool invocation records its own latency and outcome
+- **Operational Telemetry Endpoint**: `GET /api/v1/health/detailed` reports database reachability, model-call spend over the last hour, per-tool latency, embedding-outbox depth, and rate-limit rejections
+- **LangSmith Tracing (opt-in)**: Set `LANGSMITH_TRACING_ENABLED=true` with a `LANGSMITH_API_KEY` and every agent turn becomes one trace at [smith.langchain.com](https://smith.langchain.com): the model calls it made, the tools those calls triggered, their arguments and results, and the tokens and cost of each model call, all nested under the turn. Traces are searchable by user, model, and request id. Tracing lives entirely in the observability layer -- the application imports `app.observability.tracing` and never the vendor behind it -- so the vendor can change without touching application code. See the environment variables table below
+
 ### Frontend Experience
 
 - **ChatGPT-style Dark Theme**: Modern, clean dark mode interface
@@ -374,7 +381,7 @@ Every route below requires the `admin` role; the response envelopes are defined 
 | Method | Path | Description |
 |--------|------|-------------|
 | `GET` | `/api/v1/health` | Service health check |
-| `GET` | `/api/v1/health/detailed` | Database probe plus model-call spend, tool latency, outbox depth, and rate-limit rejections. Registered separately from `/health` so that pinned contract and its response shape stay untouched; a degraded sink is reported in the body, not as a failure. |
+| `GET` | `/api/v1/health/detailed` | Database probe plus model-call spend, tool latency, outbox depth, rate-limit rejections, and the tracing configuration. Registered separately from `/health` so that pinned contract and its response shape stay untouched; a degraded sink is reported in the body, not as a failure. |
 | `GET` | `/docs` | Swagger UI interactive API documentation |
 | `GET` | `/redoc` | ReDoc API documentation |
 
@@ -516,6 +523,16 @@ Observability:
 | `OBSERVABILITY_ENABLED` | `true` | No | Master switch for the request-id correlation middleware, structured log records, per-tool latency instrumentation, and `GET /api/v1/health/detailed`. `false` removes the hooks themselves rather than only silencing their output. |
 | `LLM_COST_TRACKING_ENABLED` | `true` | No | Whether the LiteLLM callback that records tokens, dollar cost, and latency per model call is registered. Disable only when an external tracer already collects the same data. |
 | `LOG_FORMAT` | `json` | No | Log record encoding. `json` writes one JSON object per line with the correlation id as a field, which is what a log aggregator expects; `text` keeps the single-line layout for reading logs by eye. |
+
+LangSmith tracing (opt-in):
+
+| Variable | Default Value | Required | Purpose & Description |
+| :------- | :------------ | :------: | :-------------------- |
+| `LANGSMITH_TRACING_ENABLED` | `false` | No | Whether every agent turn is traced to LangSmith: one trace per turn, with the model calls and tool calls it made nested under it. Off by default because prompts and responses are sent to a third-party service. Gated by `OBSERVABILITY_ENABLED` like every other hook. |
+| `LANGSMITH_API_KEY` | `""` | No | LangSmith API key (starts with `lsv2_`), created under Settings -> API Keys. Blank leaves tracing off even when enabled, and the startup logs say so. |
+| `LANGSMITH_PROJECT` | `omnicare-financial` | No | LangSmith project the traces are reported to; created on demand on the first traced run. |
+| `LANGSMITH_ENDPOINT` | `""` | No | LangSmith API base URL. Blank uses the LangSmith cloud (`https://api.smith.langchain.com`); set it for a self-hosted or region-specific deployment. |
+| `LANGSMITH_WORKSPACE_ID` | `""` | No | Workspace (organization) id, only needed for keys scoped to one workspace of a multi-workspace organization. |
 
 Redis and shared stores:
 
@@ -728,13 +745,15 @@ omnicare-financial/
 |   |   |   +-- procedure_version.py # ProcedureVersion model (playbook snapshots)
 |   |   |   +-- policy_ingestion_meta.py # Per-source ingestion metadata
 |   |   |   +-- embedding_job.py    # EmbeddingJob model
-|   |   +-- observability/          # Request-id, structured logs, metrics, telemetry
+|   |   +-- observability/          # Request-id, structured logs, metrics, telemetry, tracing
 |   |   |   +-- __init__.py         # Observability package init
 |   |   |   +-- request_context.py  # Correlation-id ContextVar
 |   |   |   +-- logging_config.py   # Structured record formatter
 |   |   |   +-- metrics.py          # Bounded in-process metric store
 |   |   |   +-- middleware.py       # RequestIdMiddleware
 |   |   |   +-- llm_callback.py     # LiteLLM success/failure cost + latency hooks
+|   |   |   +-- tracing.py          # Tracing API: the only module app code imports for tracing
+|   |   |   +-- langsmith.py        # LangSmith implementation behind the tracing API
 |   |   |   +-- tool_instrumentation.py # Per-tool call and latency instrumentation
 |   |   |   +-- routes.py           # GET /api/v1/health/detailed
 |   |   +-- schemas/                # Pydantic data schemas
@@ -772,6 +791,7 @@ omnicare-financial/
 |   |   +-- test_notification_outbox.py # Notification jobs, templates, and drain
 |   |   +-- test_distributed_state.py # Redis-shared idempotency/rate limits + DB sessions
 |   |   +-- test_observability.py   # Request ids, metrics, telemetry, detailed health
+|   |   +-- test_tracing.py         # Tracing API boundary and the LangSmith implementation
 |   |   +-- contract/               # Frozen HTTP contract suite
 |   |   |   +-- conftest.py         # Contract harness (golden comparison)
 |   |   |   +-- llm_double.py       # Deterministic LLM double for keyless runs

@@ -15,6 +15,7 @@ dependencies = [
     "python-dotenv==1.0.1",
     "google-adk>=1.2.0",
     "litellm>=1.84",
+    "langsmith>=0.3.0",
     "httpx>=0.28.0",
     "pytest>=8.3.0",
     "pytest-asyncio>=0.24.0",

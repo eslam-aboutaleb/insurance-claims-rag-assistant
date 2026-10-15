@@ -1,9 +1,13 @@
-"""Observability primitives: correlation ids, structured logs, and telemetry.
+"""Observability primitives: correlation ids, structured logs, telemetry, tracing.
 
 Submodules are imported directly by their consumers so that importing this
 package stays cheap. ``app.main`` takes the logging and request plumbing,
 ``app.rate_limiter`` only needs the metrics store, and the LiteLLM callback is
 loaded once lifespan confirms cost tracking is enabled.
+
+Tracing is the exception worth naming: consumers import
+``app.observability.tracing`` and never the vendor implementation behind it, so
+the application knows the capability and this package alone knows the vendor.
 """
 
 from app.observability.metrics import (

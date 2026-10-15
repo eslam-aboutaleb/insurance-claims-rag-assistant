@@ -35,6 +35,7 @@ from app.domain.procedures.ingestion import (
     ingest_procedures,
     procedures_ingestion_enabled,
 )
+from app.observability.tracing import setup_tracing
 from app.observability.llm_callback import register_llm_cost_callback
 from app.observability.logging_config import configure_logging
 from app.observability.middleware import RequestIdMiddleware
@@ -55,8 +56,8 @@ logger = logging.getLogger(__name__)
 def _install_observability_hooks() -> None:
     """Register the optional LLM and tool telemetry hooks.
 
-    Kept in its own function because the two hooks fail independently and
-    neither is worth a failed startup: losing telemetry must never take the chat
+    Kept in its own function because the hooks fail independently and none is
+    worth a failed startup: losing telemetry must never take the chat
     endpoints down with it.
     """
     try:
@@ -64,6 +65,15 @@ def _install_observability_hooks() -> None:
             register_llm_cost_callback()
     except Exception:
         logger.warning("LLM cost callback registration skipped", exc_info=True)
+
+    try:
+        # One call, one decision: whether tracing is live is the tracing
+        # layer's business, including the warning when it was configured
+        # without a key. This module only catches what would otherwise take
+        # the application down.
+        setup_tracing()
+    except Exception:
+        logger.warning("Tracing setup skipped", exc_info=True)
 
     try:
         install_tool_instrumentation()
@@ -143,7 +153,8 @@ async def lifespan(app: FastAPI):
     On startup:
       - Applies pending database migrations via Alembic.
       - Configures LiteLLM environment variables.
-      - Registers the cost/latency telemetry hooks.
+      - Registers the cost/latency telemetry hooks, and brings tracing up
+        when it is configured.
       - Selects session storage and the shared caches (Redis when configured).
       - Ingests the policy document into pgvector store (idempotent).
       - Ingests the procedure playbooks into their own index, gated separately

@@ -22,6 +22,7 @@ from collections.abc import Callable
 from typing import Any, get_type_hints
 
 from app.observability.metrics import build_tool_call, get_metrics
+from app.observability.tracing import trace_tool
 
 logger = logging.getLogger(__name__)
 
@@ -30,27 +31,39 @@ logger = logging.getLogger(__name__)
 _INSTALL_MARKER = "_omnicare_instrumented"
 
 
-def _with_resolved_annotations(
+def _with_original_contract(
     wrapper: Callable[..., Any],
     handler: Callable[..., Any],
 ) -> Callable[..., Any]:
-    """Store the handler's annotations on the wrapper as resolved type objects.
+    """Pin the wrapper's signature and annotations back to the original handler.
 
-    The tool modules use ``from __future__ import annotations``, so the strings
-    ``functools.wraps`` copies are evaluated against the function's own
-    ``__globals__`` -- the tool module for the handler, but this module for the
-    wrapper. A tool-local type would therefore fail to resolve on the wrapper and
-    break the tool declaration the agent generates, so they are resolved against
-    the handler here instead. A resolution failure leaves the raw strings in
-    place, which is the behaviour ``functools.wraps`` already provides.
+    The tracing span ``instrument_tool`` applies innermost returns a callable
+    carrying its own run-control keyword (``config``), and ``functools.wraps``
+    copies that keyword into the latency wrapper built on top of it. The agent
+    generates each tool's declaration from this wrapper's signature, so without
+    this the declaration would advertise a ``config`` argument no tool actually
+    takes. The signature is therefore pinned to the original handler's, dropping
+    whatever run-control keywords the span injected.
+
+    The annotations are stored as resolved type objects for the same reason the
+    signature is pinned: they feed the tool declaration too. The tool modules use
+    ``from __future__ import annotations``, so the strings ``functools.wraps``
+    copies are evaluated against the function's own ``__globals__`` -- the tool
+    module for the handler, but this module for the wrapper. A tool-local type
+    would therefore fail to resolve on the wrapper and break the declaration, so
+    they are resolved against the handler here instead. A resolution failure
+    leaves the raw strings in place, which is the behaviour ``functools.wraps``
+    already provides.
 
     Args:
-        wrapper: The wrapper function to annotate.
-        handler: The wrapped tool function.
+        wrapper: The wrapper function to pin the contract onto.
+        handler: The original tool function, before any span was applied.
 
     Returns:
-        Callable[..., Any]: The same wrapper, with resolved annotations.
+        Callable[..., Any]: The same wrapper, carrying the handler's signature
+        and resolved annotations.
     """
+    wrapper.__signature__ = inspect.signature(handler)
     try:
         resolved = get_type_hints(handler)
     except Exception:
@@ -75,6 +88,14 @@ def instrument_tool(name: str, handler: Callable[..., Any]) -> Callable[..., Any
         built from the original function exactly as before.
     """
     tool_name = name or getattr(handler, "__name__", "tool")
+
+    original = handler
+    # The tracing span is applied innermost, before the latency wrapper, for
+    # two reasons: the span nests under the trace of the turn that invoked the
+    # tool through the run context, and the outer wrappers still resolve the
+    # original handler's annotations -- which is what the agent builds the
+    # tool declaration from. Tracing off makes this a no-op.
+    handler = trace_tool(tool_name)(handler)
 
     def _record(started: float, success: bool, error: BaseException | None) -> None:
         try:
@@ -102,7 +123,7 @@ def instrument_tool(name: str, handler: Callable[..., Any]) -> Callable[..., Any
             _record(started, True, None)
             return result
 
-        return _with_resolved_annotations(async_wrapper, handler)
+        return _with_original_contract(async_wrapper, original)
 
     @functools.wraps(handler)
     def sync_wrapper(*args: Any, **kwargs: Any) -> Any:
@@ -115,7 +136,7 @@ def instrument_tool(name: str, handler: Callable[..., Any]) -> Callable[..., Any
         _record(started, True, None)
         return result
 
-    return _with_resolved_annotations(sync_wrapper, handler)
+    return _with_original_contract(sync_wrapper, original)
 
 
 def install_tool_instrumentation() -> None:

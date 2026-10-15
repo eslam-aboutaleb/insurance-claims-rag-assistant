@@ -22,6 +22,8 @@ from unittest.mock import patch
 
 import pytest
 
+from app.config import settings
+from app.observability.langsmith import DEFAULT_LANGSMITH_ENDPOINT
 from app.observability.metrics import build_llm_call, build_tool_call, reset_metrics
 from app.observability.request_context import (
     REQUEST_ID_HEADER,
@@ -553,7 +555,15 @@ class TestDetailedHealth:
 
         assert response.status_code == 200
         payload = response.json()
-        assert set(payload) == {"status", "database", "llm", "tools", "outbox", "rate_limits"}
+        assert set(payload) == {
+            "status",
+            "database",
+            "llm",
+            "tools",
+            "outbox",
+            "rate_limits",
+            "tracing",
+        }
         assert payload["status"] == "healthy"
         assert payload["database"]["connected"] is True
         assert payload["database"]["latency_ms"] >= 0
@@ -561,6 +571,15 @@ class TestDetailedHealth:
         assert payload["llm"]["total_cost_usd"] == pytest.approx(0.0042)
         assert payload["tools"]["total_calls"] == 0
         assert payload["rate_limits"]["rejections"] == 0
+        # Tracing is opt-in, and the suite never configures a key: the section
+        # reports the deployed configuration rather than the metrics, and names
+        # the backend even while off.
+        assert payload["tracing"] == {
+            "enabled": False,
+            "backend": "langsmith",
+            "project": settings.langsmith_project,
+            "endpoint": settings.langsmith_endpoint.strip() or DEFAULT_LANGSMITH_ENDPOINT,
+        }
         assert isinstance(payload["outbox"]["depth_by_status"], dict)
         assert payload["outbox"]["oldest_pending_age_seconds"] is None or (
             payload["outbox"]["oldest_pending_age_seconds"] >= 0

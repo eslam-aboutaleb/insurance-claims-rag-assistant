@@ -57,6 +57,7 @@ from app.agent.context import current_user_id
 from app.agent.prompts import SYSTEM_INSTRUCTION
 from app.agent.registry import build_default_registry
 from app.config import Settings, settings
+from app.observability.tracing import trace_turn
 from app.schemas.models import StreamToolCall, StreamToolError, StreamToolResult
 
 logger = logging.getLogger(__name__)
@@ -846,6 +847,11 @@ def _bind_user_id(user_id: str) -> None:
         logger.warning("User id '%s' is not a UUID; tool queries will not be scoped.", user_id)
 
 
+# The span that represents one turn, whatever service ends up recording it.
+# Tracing is opt-in in the observability layer; with it off the decorator is
+# the function itself, so the agent is unchanged by observability that is not
+# deployed.
+@trace_turn("omnicare_agent_turn")
 async def run_agent(user_id: str, message: str) -> dict[str, Any]:
     """Execute the ADK agent for a single user turn.
 
@@ -1017,6 +1023,7 @@ class _StreamResult:
         return "".join(self.final_text_parts)
 
 
+@trace_turn("omnicare_agent_turn_stream")
 async def run_agent_stream(
     user_id: str,
     message: str,

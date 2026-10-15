@@ -21,6 +21,7 @@ from sqlalchemy import func, select
 from app.database import async_session_factory, engine
 from app.models.embedding_job import EmbeddingJob
 from app.observability.metrics import DEFAULT_WINDOW_SECONDS, get_metrics
+from app.observability.tracing import tracing_status
 
 logger = logging.getLogger(__name__)
 
@@ -140,6 +141,30 @@ class RateLimitMetrics(BaseModel):
     )
 
 
+class TracingMetrics(BaseModel):
+    """Tracing configuration of this deployment.
+
+    Reported because tracing is opt-in and external: an operator reading the
+    telemetry endpoint needs to see whether traces are being produced at all
+    and where they land, without shelling into the container to read the
+    environment. The section is named for the capability rather than the
+    vendor, exactly like the route imports it.
+
+    Attributes:
+        enabled: Whether turns are traced right now -- the setting and the
+            API key both have to be in place.
+        backend: The vendor providing tracing, named even when tracing is
+            off so a configured-but-inactive deployment is visible.
+        project: The project traces are grouped under.
+        endpoint: The API base URL traces are posted to.
+    """
+
+    enabled: bool = Field(description="Whether turns are traced right now.")
+    backend: str = Field(description="Vendor providing tracing, named even when off.")
+    project: str = Field(description="Project traces are grouped under.")
+    endpoint: str = Field(description="API base URL traces are posted to.")
+
+
 class DetailedHealthResponse(BaseModel):
     """Response body for ``GET /api/v1/health/detailed``.
 
@@ -152,6 +177,7 @@ class DetailedHealthResponse(BaseModel):
         tools: Tool latency and outcome totals.
         outbox: Embedding outbox depth and backlog age.
         rate_limits: Requests the rate limiter refused.
+        tracing: Tracing configuration.
     """
 
     status: str = Field(description="Aggregate status of the reported dependencies.")
@@ -160,6 +186,23 @@ class DetailedHealthResponse(BaseModel):
     tools: ToolSummary = Field(description="Tool latency and outcome totals.")
     outbox: OutboxMetrics = Field(description="Embedding outbox depth and backlog age.")
     rate_limits: RateLimitMetrics = Field(description="Rate-limit rejections.")
+    tracing: TracingMetrics = Field(description="Tracing configuration.")
+
+
+def _tracing_metrics() -> TracingMetrics:
+    """Report the tracing configuration this deployment is running.
+
+    Returns:
+        TracingMetrics: Whether tracing is live, which backend provides it,
+        and where traces are reported to.
+    """
+    status = tracing_status()
+    return TracingMetrics(
+        enabled=status.enabled,
+        backend=status.backend,
+        project=status.project,
+        endpoint=status.endpoint,
+    )
 
 
 async def _ping_database() -> DatabaseMetrics:
@@ -234,8 +277,9 @@ router = APIRouter(prefix="/api/v1", tags=["Health"])
     summary="Detailed Health and Telemetry",
     description=(
         "Returns database reachability plus operational telemetry: model-call "
-        "count and spend over the last hour, tool latency and outcomes, and the "
-        "embedding outbox depth with the age of its oldest pending job."
+        "count and spend over the last hour, tool latency and outcomes, the "
+        "embedding outbox depth with the age of its oldest pending job, and the "
+        "tracing configuration."
     ),
     responses={
         status.HTTP_200_OK: {
@@ -282,6 +326,7 @@ async def detailed_health_check(response: Response) -> DetailedHealthResponse:
             tools=tools,
             outbox=OutboxMetrics(),
             rate_limits=rate_limits,
+            tracing=_tracing_metrics(),
         )
 
     outbox = await _read_outbox()
@@ -294,4 +339,5 @@ async def detailed_health_check(response: Response) -> DetailedHealthResponse:
         tools=tools,
         outbox=outbox or OutboxMetrics(),
         rate_limits=rate_limits,
+        tracing=_tracing_metrics(),
     )
