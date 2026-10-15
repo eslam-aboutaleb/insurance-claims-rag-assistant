@@ -40,7 +40,7 @@ def admin_user(test_client):
     Signup only mints a policyholder, so the row is promoted the way an
     operator would before its token is used.
     """
-    from app.database import async_session_factory, engine
+    from app.core.database import async_session_factory, engine
     from app.models.user import User
 
     username = f"eval_admin_{uuid.uuid4().hex[:8]}"

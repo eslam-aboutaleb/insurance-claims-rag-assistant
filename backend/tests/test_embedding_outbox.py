@@ -13,7 +13,7 @@ import uuid
 
 from sqlalchemy import func, select
 
-from app.database import async_session_factory
+from app.core.database import async_session_factory
 from app.domain.claims.outbox import enqueue_embedding_job
 
 
@@ -51,7 +51,7 @@ def _job_kwargs(claim_uuid: uuid.UUID, owner_id: uuid.UUID) -> dict:
 
 
 def _count_jobs(**where) -> int:
-    from app.models.embedding_job import EmbeddingJob
+    from app.models.claims.embedding_job import EmbeddingJob
 
     async def _count() -> int:
         async with async_session_factory() as session:
@@ -131,7 +131,7 @@ def test_job_claim_uuid_has_no_foreign_key_to_claims() -> None:
     """
     from sqlalchemy import inspect as sa_inspect
 
-    from app.database import engine
+    from app.core.database import engine
 
     async def _fks() -> dict[str, list[str]]:
         def _sync(connection):

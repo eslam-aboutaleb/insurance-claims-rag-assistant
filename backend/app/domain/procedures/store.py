@@ -25,8 +25,8 @@ from typing import Any
 
 from sqlalchemy import select, text as sa_text
 
-from app.database import async_session_factory
-from app.models.procedure_version import ProcedureVersion
+from app.core.database import async_session_factory
+from app.models.policies.procedure_version import ProcedureVersion
 from ragit.ingestion import IngestionSnapshot, VersionRecord
 
 logger = logging.getLogger(__name__)

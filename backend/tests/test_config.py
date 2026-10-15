@@ -12,7 +12,7 @@ Tests:
 import pytest
 from pydantic import ValidationError
 
-from app.config import Settings, get_settings
+from app.core.config import Settings, get_settings
 
 
 def test_default_settings():

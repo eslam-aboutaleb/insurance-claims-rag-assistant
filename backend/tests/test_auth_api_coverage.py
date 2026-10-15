@@ -39,7 +39,7 @@ class TestAuthAPI:
         mock_session.execute.return_value.scalar_one_or_none.return_value = None
         mock_session.commit = AsyncMock(side_effect=IntegrityError("duplicate", None, None))
 
-        with patch("app.database.async_session_factory") as mock_factory:
+        with patch("app.core.database.async_session_factory") as mock_factory:
             mock_factory.return_value.__aenter__.return_value = mock_session
             response = test_client.post(
                 "/api/v1/auth/signup",
@@ -170,7 +170,7 @@ class TestAuthEndpointUnits:
     @pytest.mark.asyncio
     async def test_signin_nonexistent_user_verifies_against_dummy_hash(self):
         from app.api.v1.auth import signin
-        from app.auth import DUMMY_PASSWORD_HASH
+        from app.security.auth import DUMMY_PASSWORD_HASH
         from app.schemas.models import UserSignin
 
         session = self._session_with(existing=None)

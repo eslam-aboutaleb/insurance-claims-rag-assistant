@@ -7,8 +7,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.config import get_settings
-from app.database import async_session_factory
+from app.core.config import get_settings
+from app.core.database import async_session_factory
 from app.domain.claims.ingest import ingest_all_claims, ingest_claim
 from app.domain.claims.retriever import retrieve_claims_hybrid
 from app.domain.embeddings import EmbeddingFactory, LitellmEmbeddingFunction

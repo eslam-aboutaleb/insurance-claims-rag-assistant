@@ -17,7 +17,7 @@ import logging
 import re
 from typing import Any
 
-from app.config import get_settings
+from app.core.config import get_settings
 from app.domain.policies.retriever import retrieve_hybrid
 
 logger = logging.getLogger(__name__)

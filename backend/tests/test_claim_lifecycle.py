@@ -25,10 +25,10 @@ from fastapi.testclient import TestClient
 from sqlalchemy import func, select
 
 from app.api.v1 import claims as claims_api
-from app.database import async_session_factory, engine
-from app.models.claim import Claim
-from app.models.claim_event import ALLOWED_STATUS_TRANSITIONS, ClaimStatus
-from app.models.embedding_job import EmbeddingJob
+from app.core.database import async_session_factory, engine
+from app.models.claims.claim import Claim
+from app.models.claims.claim_event import ALLOWED_STATUS_TRANSITIONS, ClaimStatus
+from app.models.claims.embedding_job import EmbeddingJob
 
 _TEST_PASSWORD = "LifecyclePass123!"  # noqa: S105 - fixture credential, not a secret
 

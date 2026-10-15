@@ -10,7 +10,7 @@ Run it directly:
 
     python -m app.workers.notification_drain
 
-Configuration (all optional, validated by ``app.config.Settings``):
+Configuration (all optional, validated by ``app.core.config.Settings``):
 
     NOTIFICATION_DRAIN_INTERVAL_SECONDS  seconds to sleep when the queue is empty
     NOTIFICATION_DRAIN_BATCH_SIZE       jobs delivered per pass
@@ -27,7 +27,7 @@ from __future__ import annotations
 
 import sys
 
-from app.config import settings
+from app.core.config import settings
 from app.domain.notifications.outbox import NotificationJobProcessor, NotificationJobStore
 from ragit.jobs.drainer import main as _ragit_main
 

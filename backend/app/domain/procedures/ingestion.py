@@ -17,7 +17,7 @@ so the per-source snapshot comparison, version retirement, and chunk deletion
 all stay per-playbook. Nothing here forks or reimplements the pipeline.
 
 The startup gate is read from ``OMNICARE_INGEST_PROCEDURES`` rather than from
-``app.config.Settings``: the settings module is owned by another track, and a
+``app.core.config.Settings``: the settings module is owned by another track, and a
 flag read inside this package is the non-invasive way to make boot cost
 optional. Ingestion is idempotent — an unchanged corpus is detected by snapshot
 comparison and skips embedding entirely — so the default is enabled.
@@ -32,8 +32,8 @@ from pathlib import Path
 
 from sqlalchemy import text as sa_text
 
-from app.config import get_settings
-from app.database import async_session_factory
+from app.core.config import get_settings
+from app.core.database import async_session_factory
 from app.domain.procedures.store import ProcedureVersionStore
 from ragit.chunking import MarkdownSectionChunker, SlidingWindowChunker
 from ragit.ingestion import FileDocumentSource, IngestionPipeline

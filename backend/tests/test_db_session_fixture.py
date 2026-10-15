@@ -52,7 +52,7 @@ async def test_db_session_discards_a_commit(db_session) -> None:
     db_session.add(user)
     await db_session.commit()
 
-    from app.database import async_session_factory
+    from app.core.database import async_session_factory
 
     async with async_session_factory() as verify:
         found = await verify.scalar(

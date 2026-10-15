@@ -21,12 +21,12 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agent.tools.submit_claim import submit_claim_internal
-from app.auth import get_current_user
-from app.database import async_session_factory, get_db
+from app.security.auth import get_current_user
+from app.core.database import async_session_factory, get_db
 from app.domain.claims.outbox import enqueue_embedding_job
 from app.domain.notifications.outbox import enqueue_notification_job
-from app.models.claim import Claim
-from app.models.claim_event import (
+from app.models.claims.claim import Claim
+from app.models.claims.claim_event import (
     POLICYHOLDER_STATUSES,
     ClaimEvent,
     ClaimStatus,
@@ -34,8 +34,8 @@ from app.models.claim_event import (
     is_status_transition_allowed,
     parse_claim_status,
 )
-from app.models.claim_submission import ClaimSubmission
-from app.models.notification_job import (
+from app.models.claims.claim_submission import ClaimSubmission
+from app.models.platform.notification_job import (
     JOB_TYPE_CLAIM_STATUS_CHANGED,
     JOB_TYPE_CLAIM_SUBMITTED,
     JOB_TYPE_CLAIM_WITHDRAWN,

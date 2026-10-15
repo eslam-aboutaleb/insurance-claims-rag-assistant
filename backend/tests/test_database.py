@@ -1,5 +1,5 @@
 """
-Tests for app.database module.
+Tests for app.core.database module.
 
 Covers get_db dependency and create_all_tables.
 """
@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.database import create_all_tables, get_db
+from app.core.database import create_all_tables, get_db
 
 
 @pytest.mark.asyncio
@@ -16,7 +16,7 @@ async def test_get_db_yields_session():
     mock_session = AsyncMock()
     mock_session.close = AsyncMock()
 
-    with patch("app.database.async_session_factory") as mock_factory:
+    with patch("app.core.database.async_session_factory") as mock_factory:
         mock_factory.return_value.__aenter__.return_value = mock_session
 
         gen = get_db()
@@ -36,7 +36,7 @@ async def test_get_db_closes_on_exception():
     mock_session = AsyncMock()
     mock_session.close = AsyncMock()
 
-    with patch("app.database.async_session_factory") as mock_factory:
+    with patch("app.core.database.async_session_factory") as mock_factory:
         mock_factory.return_value.__aenter__.return_value = mock_session
 
         gen = get_db()
@@ -51,7 +51,7 @@ async def test_get_db_closes_on_exception():
 
 @pytest.mark.asyncio
 async def test_create_all_tables():
-    with patch("app.database.engine") as mock_engine:
+    with patch("app.core.database.engine") as mock_engine:
         mock_conn = AsyncMock()
         mock_engine.begin.return_value.__aenter__.return_value = mock_conn
         mock_conn.run_sync = AsyncMock()

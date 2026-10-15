@@ -37,7 +37,7 @@ def admin_a(contract_client: TestClient) -> SeededUser:
     from the database rather than from the token, so a promoted account is the only
     honest way to drive it.
     """
-    from app.database import async_session_factory, engine
+    from app.core.database import async_session_factory, engine
     from app.models.user import User
 
     username = f"contract_admin_{uuid.uuid4().hex[:8]}"

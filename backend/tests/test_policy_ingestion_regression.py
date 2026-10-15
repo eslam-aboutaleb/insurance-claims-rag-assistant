@@ -31,7 +31,7 @@ import pytest
 import pytest_asyncio
 from sqlalchemy import inspect as sa_inspect, text, types as sa_types
 
-from app.database import engine
+from app.core.database import engine
 
 _POLICY_TABLES = ("policy_chunks", "policy_versions", "policy_ingestion_meta", "policies")
 
@@ -39,7 +39,7 @@ _POLICY_TABLES = ("policy_chunks", "policy_versions", "policy_ingestion_meta", "
 @pytest_asyncio.fixture
 async def clean_policy_tables():
     """Delete policy rows before and after the test."""
-    from app.database import async_session_factory
+    from app.core.database import async_session_factory
 
     async def _clear() -> None:
         async with async_session_factory() as session:
@@ -87,7 +87,7 @@ async def test_ingest_writes_policy_chunks_with_ownership(clean_policy_tables) -
     count = await ingest_policy()
     assert count > 0, "ingestion produced no chunks"
 
-    from app.database import async_session_factory
+    from app.core.database import async_session_factory
 
     async def _read() -> list[tuple]:
         async with async_session_factory() as session:
@@ -119,7 +119,7 @@ async def test_ingest_is_idempotent(clean_policy_tables) -> None:
 
     assert first == second
 
-    from app.database import async_session_factory
+    from app.core.database import async_session_factory
 
     async def _count() -> int:
         async with async_session_factory() as session:

@@ -28,7 +28,7 @@ from ragit.jobs import process_pending_jobs as _ragit_process_pending_jobs
 from sqlalchemy import func, select, text, update
 
 from app.api.v1 import claims as claims_api
-from app.database import async_session_factory, engine
+from app.core.database import async_session_factory, engine
 from app.domain.notifications.outbox import (
     NotificationJobProcessor,
     NotificationJobStore,
@@ -36,8 +36,8 @@ from app.domain.notifications.outbox import (
     process_pending_notification_jobs,
     render_notification,
 )
-from app.models.claim import Claim
-from app.models.notification_job import (
+from app.models.claims.claim import Claim
+from app.models.platform.notification_job import (
     CHANNEL_EMAIL,
     JOB_TYPE_CLAIM_STATUS_CHANGED,
     JOB_TYPE_CLAIM_SUBMITTED,
@@ -978,7 +978,7 @@ def test_the_unread_filter_only_returns_unacknowledged_rows(
 
 def test_main_wires_app_store_and_processor_into_ragit_drainer() -> None:
     """The entry point builds the OmniCare store and processor and passes settings."""
-    from app.config import settings
+    from app.core.config import settings
     from app.workers import notification_drain
 
     with patch.object(notification_drain, "_ragit_main", return_value=0) as mock_main:
@@ -997,7 +997,7 @@ def test_notification_drain_settings_are_bounded() -> None:
     """Settings enforce the documented bounds rather than clamping at runtime."""
     from pydantic import ValidationError
 
-    from app.config import Settings
+    from app.core.config import Settings
 
     with pytest.raises(ValidationError):
         Settings(notification_drain_interval_seconds=0)

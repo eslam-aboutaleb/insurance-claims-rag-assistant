@@ -9,7 +9,7 @@ Features:
 - Session management with reuse and automatic cleanup
 - Self-contained tool integration (Policy RAG, Claim Status, Claim Preparation)
 - Gemini-style function call + result response synthesis
-- Idempotency handled at the route decorator level (see app.idempotency)
+- Idempotency handled at the route decorator level (see app.core.idempotency)
 
 Architecture Note:
     This module is intentionally framework-agnostic regarding the web server;
@@ -56,7 +56,7 @@ from sqlalchemy.exc import IntegrityError
 from app.agent.context import current_user_id
 from app.agent.prompts import SYSTEM_INSTRUCTION
 from app.agent.registry import build_default_registry
-from app.config import Settings, settings
+from app.core.config import Settings, settings
 from app.observability.tracing import trace_turn
 from app.schemas.models import StreamToolCall, StreamToolError, StreamToolResult
 
@@ -457,7 +457,7 @@ def _timestamp(value: Any) -> float:
 
 
 # Module-level configuration
-# NOTE: ``settings`` is imported from app.config so there is exactly one settings
+# NOTE: ``settings`` is imported from app.core.config so there is exactly one settings
 # object in the process; everything that reads ``settings.llm_model`` or
 # ``settings.session_storage`` sees the same values the rest of the app does.
 
@@ -564,7 +564,7 @@ def _build_session_service() -> BaseSessionService:
         stored history on a restart is a better outcome than refusing to serve.
     """
     if settings.session_storage == "database":
-        from app.database import engine  # noqa: PLC0415
+        from app.core.database import engine  # noqa: PLC0415
 
         service = DatabaseSessionService(engine)
         logger.info(
@@ -1208,9 +1208,9 @@ async def _load_recent_turns(user_id: str) -> list[types.Content]:
         list[types.Content]: Contents to prepend, oldest first. Empty when the
         user has no persisted turns.
     """
-    from app.database import async_session_factory  # noqa: PLC0415
-    from app.models.conversation import Conversation  # noqa: PLC0415
-    from app.models.conversation_message import ConversationMessage  # noqa: PLC0415
+    from app.core.database import async_session_factory  # noqa: PLC0415
+    from app.models.conversations.conversation import Conversation  # noqa: PLC0415
+    from app.models.conversations.conversation_message import ConversationMessage  # noqa: PLC0415
 
     try:
         user_uuid = uuid.UUID(str(user_id))

@@ -19,11 +19,11 @@ from datetime import UTC, datetime
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
-from app.auth import create_access_token
-from app.database import async_session_factory, engine
-from app.models.answer_feedback import AnswerFeedback
-from app.models.conversation import Conversation
-from app.models.conversation_message import ConversationMessage
+from app.security.auth import create_access_token
+from app.core.database import async_session_factory, engine
+from app.models.conversations.answer_feedback import AnswerFeedback
+from app.models.conversations.conversation import Conversation
+from app.models.conversations.conversation_message import ConversationMessage
 from app.models.user import User
 
 _TEST_PASSWORD = "FeedbackPass123!"  # noqa: S105 - fixture credential, not a secret
@@ -393,7 +393,7 @@ def test_withdrawing_leaves_an_audit_trail(test_client: TestClient) -> None:
     Once the row is gone the two states look identical, so the trail is the
     only thing that still distinguishes "never rated" from "withdrew a rating".
     """
-    from app.models.audit_event import AuditEvent  # noqa: PLC0415
+    from app.models.platform.audit_event import AuditEvent  # noqa: PLC0415
 
     owner_id, headers = _signup(test_client, "feedback_owner_audited")
     message_id = uuid.uuid4()

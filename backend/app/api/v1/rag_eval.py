@@ -16,7 +16,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 
-from app.auth import get_current_user, require_role
+from app.security.auth import get_current_user, require_role
 from app.domain.evaluation import (
     Difficulty,
     EvalConfig,
@@ -24,7 +24,7 @@ from app.domain.evaluation import (
     get_eval_dataset,
     run_evaluation,
 )
-from app.rate_limiter import limiter
+from app.core.rate_limiter import limiter
 from app.schemas.models import ErrorResponse, RagEvalRequest, RagEvalResponse
 
 logger = logging.getLogger(__name__)

@@ -61,8 +61,8 @@ from fastapi.responses import StreamingResponse
 
 from app.agent.agent import _StreamResult, run_agent_stream, sse_frame
 from app.agent.conversation_store import SavedMessageIds, save_conversation_turn
-from app.auth import get_current_user
-from app.rate_limiter import limiter
+from app.security.auth import get_current_user
+from app.core.rate_limiter import limiter
 from app.schemas.models import (
     ChatRequest,
     StreamError,

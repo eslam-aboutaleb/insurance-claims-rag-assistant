@@ -44,7 +44,7 @@ from dataclasses import dataclass, replace
 from enum import StrEnum
 from typing import Any
 
-from app.config import get_settings
+from app.core.config import get_settings
 from app.domain.evaluation_runs import record_eval_run
 from app.domain.policies.retriever import retrieve_hybrid
 from ragit.evaluation.dataset import Difficulty, EvalSample
@@ -610,7 +610,7 @@ async def load_policy_section_texts() -> dict[str, str]:
     """
     from sqlalchemy import text as sql_text  # noqa: PLC0415
 
-    from app.database import async_session_factory  # noqa: PLC0415
+    from app.core.database import async_session_factory  # noqa: PLC0415
 
     async with async_session_factory() as session:
         rows = (await session.execute(sql_text("SELECT section, text FROM policy_chunks"))).all()

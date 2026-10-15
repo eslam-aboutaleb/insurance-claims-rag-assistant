@@ -26,11 +26,11 @@ from limits.storage import Storage
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
-# The blocking RESP client and its codec live in the idempotency module, which
-# needed them first. One implementation of the wire protocol serves both stores
-# so the two cannot drift apart.
-from app.config import settings
-from app.idempotency import RedisClient, RedisProtocolError, RedisUnavailable
+# The blocking RESP client and its codec live in ``core.redis_client``. One
+# implementation of the wire protocol serves both this store and the
+# idempotency cache, so the two cannot drift apart.
+from app.core.config import settings
+from app.core.redis_client import RedisClient, RedisProtocolError, RedisUnavailable
 from app.observability.metrics import LimiterRejection, get_metrics
 from app.observability.request_context import get_request_id
 
@@ -238,7 +238,7 @@ def _user_or_ip_key_func(request):
 
     if token:
         try:
-            from app.auth import _decode_token  # noqa: PLC0415
+            from app.security.auth import _decode_token  # noqa: PLC0415
 
             user_id = _decode_token(token)
             return f"user:{str(user_id)}"

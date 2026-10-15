@@ -44,7 +44,7 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.database import async_session_factory
+from app.core.database import async_session_factory
 from app.domain.claims.retriever import CLAIMS_RETRIEVER_SPEC
 from ragit.jobs import JobPayload, claim_jobs, enqueue_job
 from ragit.jobs import (
@@ -97,7 +97,7 @@ class SqlAlchemyJobStore:
         """
         from sqlalchemy import select  # noqa: PLC0415
 
-        from app.models.embedding_job import EmbeddingJob  # noqa: PLC0415
+        from app.models.claims.embedding_job import EmbeddingJob  # noqa: PLC0415
 
         now = datetime.now(UTC)
         async with self._session_factory() as session:
@@ -127,7 +127,7 @@ class SqlAlchemyJobStore:
         """
         from sqlalchemy import update  # noqa: PLC0415
 
-        from app.models.embedding_job import EmbeddingJob  # noqa: PLC0415
+        from app.models.claims.embedding_job import EmbeddingJob  # noqa: PLC0415
 
         if not jobs:
             return []
@@ -162,7 +162,7 @@ class SqlAlchemyJobStore:
         """Persist a successfully processed job as ``completed``."""
         from sqlalchemy import update  # noqa: PLC0415
 
-        from app.models.embedding_job import EmbeddingJob  # noqa: PLC0415
+        from app.models.claims.embedding_job import EmbeddingJob  # noqa: PLC0415
 
         async with self._session_factory() as session:
             await session.execute(
@@ -176,7 +176,7 @@ class SqlAlchemyJobStore:
         """Persist a failed job's retry/dead-letter transition."""
         from sqlalchemy import update  # noqa: PLC0415
 
-        from app.models.embedding_job import EmbeddingJob  # noqa: PLC0415
+        from app.models.claims.embedding_job import EmbeddingJob  # noqa: PLC0415
 
         async with self._session_factory() as session:
             await session.execute(
@@ -197,10 +197,10 @@ class SqlAlchemyJobStore:
         """Reset jobs abandoned in ``processing`` back to ``pending``."""
         from sqlalchemy import select  # noqa: PLC0415
 
-        from app.models.embedding_job import EmbeddingJob  # noqa: PLC0415
+        from app.models.claims.embedding_job import EmbeddingJob  # noqa: PLC0415
 
         if stale_after_seconds is None:
-            from app.config import settings  # noqa: PLC0415
+            from app.core.config import settings  # noqa: PLC0415
 
             stale_after_seconds = settings.job_stale_after_seconds
 
@@ -237,7 +237,7 @@ class SqlAlchemyJobStore:
         transaction. Without a session this opens its own session and
         commits.
         """
-        from app.models.embedding_job import EmbeddingJob  # noqa: PLC0415
+        from app.models.claims.embedding_job import EmbeddingJob  # noqa: PLC0415
 
         job = EmbeddingJob(
             claim_uuid=uuid.UUID(str(payload["claim_uuid"])),
@@ -266,9 +266,9 @@ class ClaimJobProcessor:
         """Embed the claim text and upsert it into the claims vector store."""
         from sqlalchemy import select  # noqa: PLC0415
 
-        from app.config import get_settings  # noqa: PLC0415
+        from app.core.config import get_settings  # noqa: PLC0415
         from app.domain.embeddings import EmbeddingFactory, get_vector_store  # noqa: PLC0415
-        from app.models.claim import Claim  # noqa: PLC0415
+        from app.models.claims.claim import Claim  # noqa: PLC0415
         from ragit.embeddings import get_embedding_dimension  # noqa: PLC0415
         from ragit.validation import validate_embedding  # noqa: PLC0415
 
@@ -422,7 +422,7 @@ async def process_pending_jobs(limit: int = 10, worker_id: str | None = None) ->
     Returns:
         int: Number of jobs successfully processed.
     """
-    from app.config import settings  # noqa: PLC0415
+    from app.core.config import settings  # noqa: PLC0415
 
     if worker_id is None:
         worker_id = settings.worker_id
@@ -456,7 +456,7 @@ async def reclaim_stale_jobs(stale_after_seconds: float | None = None) -> int:
         int: Number of jobs reclaimed.
     """
     if stale_after_seconds is None:
-        from app.config import settings  # noqa: PLC0415
+        from app.core.config import settings  # noqa: PLC0415
 
         stale_after_seconds = settings.job_stale_after_seconds
 

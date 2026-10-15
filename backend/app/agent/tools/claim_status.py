@@ -14,8 +14,8 @@ from typing import Any
 from sqlalchemy import select
 
 from app.agent.context import current_user_id
-from app.database import async_session_factory
-from app.models.claim import Claim
+from app.core.database import async_session_factory
+from app.models.claims.claim import Claim
 
 logger = logging.getLogger(__name__)
 

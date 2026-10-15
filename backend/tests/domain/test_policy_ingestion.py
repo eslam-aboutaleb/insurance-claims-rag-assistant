@@ -12,7 +12,7 @@ import pytest
 import pytest_asyncio
 from sqlalchemy import text
 
-from app.database import async_session_factory
+from app.core.database import async_session_factory
 
 _POLICY_TABLES = ("policy_chunks", "policy_versions", "policy_ingestion_meta", "policies")
 

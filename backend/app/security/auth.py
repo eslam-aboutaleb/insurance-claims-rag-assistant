@@ -36,8 +36,8 @@ from app.agent.context import current_user_id
 
 # JWT configuration. ``JWT_SECRET_KEY`` must be set in production; the
 # fallback value is for local development only.
-from app.config import settings
-from app.database import get_db
+from app.core.config import settings
+from app.core.database import get_db
 from app.models.user import User, UserRole
 
 SECRET_KEY = settings.jwt_secret_key

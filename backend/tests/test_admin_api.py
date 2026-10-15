@@ -28,13 +28,13 @@ from sqlalchemy import select
 
 from app.api.v1.admin import router as admin_router
 from app.audit import record_audit
-from app.database import async_session_factory, engine
-from app.models.answer_feedback import AnswerFeedback
-from app.models.audit_event import AuditEvent
-from app.models.claim import Claim
-from app.models.conversation import Conversation
-from app.models.conversation_message import ConversationMessage
-from app.models.embedding_job import EmbeddingJob
+from app.core.database import async_session_factory, engine
+from app.models.conversations.answer_feedback import AnswerFeedback
+from app.models.platform.audit_event import AuditEvent
+from app.models.claims.claim import Claim
+from app.models.conversations.conversation import Conversation
+from app.models.conversations.conversation_message import ConversationMessage
+from app.models.claims.embedding_job import EmbeddingJob
 from app.models.user import User
 
 _PASSWORD = "TestPass123!"
@@ -483,7 +483,7 @@ def test_a_failed_audit_write_does_not_break_the_transition(test_client: TestCli
     claim_id = f"CLM-{uuid.uuid4().hex[:8].upper()}"
     _seed([_claim_row(holder["user_id"], claim_id)])
 
-    with patch("app.audit.AuditEvent", MagicMock(side_effect=RuntimeError("trail offline"))):
+    with patch("app.audit.service.AuditEvent", MagicMock(side_effect=RuntimeError("trail offline"))):
         response = test_client.post(
             f"/api/v1/claims/{claim_id}/status",
             json={"status": "Withdrawn"},
@@ -535,7 +535,7 @@ def test_record_audit_swallows_a_failed_write(caplog: pytest.LogCaptureFixture) 
     async def _run() -> None:
         await record_audit(_BrokenSession(), "auth.signin", "user", "user-uuid")
 
-    with caplog.at_level(logging.WARNING, logger="app.audit"):
+    with caplog.at_level(logging.WARNING, logger="app.audit.service"):
         result = asyncio.run(_run())
 
     assert result is None

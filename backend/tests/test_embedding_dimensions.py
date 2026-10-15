@@ -33,7 +33,7 @@ class TestEmbeddingDimensions:
         )
 
     def test_default_uses_the_configured_embedding_model(self):
-        from app.config import settings
+        from app.core.config import settings
 
         assert get_embedding_dimension() == get_embedding_dimension(settings.embedding_model)
 

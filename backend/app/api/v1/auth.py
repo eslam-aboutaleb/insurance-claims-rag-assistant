@@ -28,7 +28,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.audit import record_audit
-from app.auth import (
+from app.security.auth import (
     DUMMY_PASSWORD_HASH,
     clear_session_cookie,
     create_access_token,
@@ -37,7 +37,7 @@ from app.auth import (
     set_session_cookie,
     verify_password,
 )
-from app.database import get_db
+from app.core.database import get_db
 from app.models.user import User
 from app.schemas.models import Token, UserMe, UserSignin, UserSignup
 

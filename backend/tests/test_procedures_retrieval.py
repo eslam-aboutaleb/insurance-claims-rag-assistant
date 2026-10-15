@@ -13,7 +13,7 @@ import pytest
 import pytest_asyncio
 from sqlalchemy import text
 
-from app.database import async_session_factory
+from app.core.database import async_session_factory
 
 _PROCEDURE_TABLES = ("procedure_chunks", "procedure_versions")
 

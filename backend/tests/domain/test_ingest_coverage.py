@@ -14,7 +14,7 @@ import pytest
 class TestIngest:
     @pytest.mark.asyncio
     async def test_ingest_policy_no_path_configured(self):
-        from app.config import Settings
+        from app.core.config import Settings
         from app.domain.policies.ingestion import ingest_policy
 
         with patch("app.domain.policies.ingestion.get_settings") as mock_get_settings:

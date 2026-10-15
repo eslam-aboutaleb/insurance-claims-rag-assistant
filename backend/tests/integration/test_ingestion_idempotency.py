@@ -14,8 +14,8 @@ from typing import Any
 import pytest
 from sqlalchemy import text
 
-from app.config import settings
-from app.database import async_session_factory
+from app.core.config import settings
+from app.core.database import async_session_factory
 from app.domain.policies.ingestion import ingest_policy
 from app.domain.embeddings import get_vector_store
 from tests.integration.conftest import hash_embedding

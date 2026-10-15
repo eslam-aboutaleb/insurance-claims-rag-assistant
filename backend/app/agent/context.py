@@ -14,8 +14,8 @@ Why ContextVars instead of global state?
     is isolated per concurrent task.
 
 Usage pattern:
-  - ``get_current_user`` (in ``app/auth.py``) sets ``current_user_id`` after
-    successful JWT validation.
+  - ``get_current_user`` (in ``app/security/auth.py``) sets ``current_user_id``
+    after successful JWT validation.
   - Agent tools and other downstream code read ``current_user_id.get()`` to
     scope database queries and audit log entries to the correct user.
 """

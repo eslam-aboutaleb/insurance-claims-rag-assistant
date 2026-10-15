@@ -130,7 +130,7 @@ CLAIMS_SEED: list[dict[str, Any]] = [
 @pytest_asyncio.fixture(scope="function")
 async def seeded_users() -> dict[str, uuid.UUID]:
     """Create the two Tier B users and return their UUIDs keyed a/b."""
-    from app.database import async_session_factory
+    from app.core.database import async_session_factory
     from app.models.user import User
 
     users = {"a": uuid.uuid4(), "b": uuid.uuid4()}
@@ -207,7 +207,7 @@ async def tierb_seed(
 
 async def section_chunk_ids() -> dict[str, list[str]]:
     """Return the chunk ids currently stored, keyed by section title."""
-    from app.database import async_session_factory
+    from app.core.database import async_session_factory
 
     async with async_session_factory() as session:
         rows = (await session.execute(text("SELECT section, chunk_id FROM policy_chunks"))).all()

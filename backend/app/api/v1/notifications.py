@@ -28,9 +28,9 @@ from pydantic import BaseModel, Field
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth import get_current_user
-from app.database import get_db
-from app.models.notification_job import Notification
+from app.security.auth import get_current_user
+from app.core.database import get_db
+from app.models.platform.notification_job import Notification
 from app.schemas.models import ErrorResponse
 
 logger = logging.getLogger(__name__)

@@ -19,7 +19,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from app.idempotency import (
+from app.core.idempotency import (
     _MAX_SIZE,
     _TTL_SECONDS,
     _cache,

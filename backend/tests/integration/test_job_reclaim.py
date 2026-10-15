@@ -24,8 +24,8 @@ async def _insert_job(
     locked_at: datetime | None,
     locked_by: str | None,
 ) -> str:
-    from app.database import async_session_factory
-    from app.models.embedding_job import EmbeddingJob
+    from app.core.database import async_session_factory
+    from app.models.claims.embedding_job import EmbeddingJob
 
     claim_id = f"CLM-{uuid.uuid4().hex[:8].upper()}"
     async with async_session_factory() as session:
@@ -51,8 +51,8 @@ async def _insert_job(
 async def _job_states() -> dict[str, tuple[str, str | None, datetime | None]]:
     from sqlalchemy import select
 
-    from app.database import async_session_factory
-    from app.models.embedding_job import EmbeddingJob
+    from app.core.database import async_session_factory
+    from app.models.claims.embedding_job import EmbeddingJob
 
     async with async_session_factory() as session:
         rows = await session.execute(
@@ -143,7 +143,7 @@ async def test_reclaim_uses_the_configured_default_threshold(
     monkeypatch: pytest.MonkeyPatch,
 ):
     """The default threshold comes from settings, not a hardcoded constant."""
-    from app.config import settings
+    from app.core.config import settings
 
     owner = seeded_users["a"]
     await _insert_job(

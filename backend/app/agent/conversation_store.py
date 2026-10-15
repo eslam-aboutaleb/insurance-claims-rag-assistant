@@ -25,9 +25,9 @@ from datetime import UTC, datetime
 
 from sqlalchemy import select
 
-from app.database import async_session_factory
-from app.models.conversation import Conversation
-from app.models.conversation_message import ConversationMessage
+from app.core.database import async_session_factory
+from app.models.conversations.conversation import Conversation
+from app.models.conversations.conversation_message import ConversationMessage
 
 logger = logging.getLogger(__name__)
 

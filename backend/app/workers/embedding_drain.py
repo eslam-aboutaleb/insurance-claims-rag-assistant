@@ -12,7 +12,7 @@ Run it directly:
 
     python -m app.workers.embedding_drain
 
-Configuration (all optional, validated by ``app.config.Settings``):
+Configuration (all optional, validated by ``app.core.config.Settings``):
 
     EMBEDDING_DRAIN_INTERVAL_SECONDS  seconds to sleep when the queue is empty
     EMBEDDING_DRAIN_BATCH_SIZE       jobs claimed per pass
@@ -25,7 +25,7 @@ from __future__ import annotations
 
 import sys
 
-from app.config import settings
+from app.core.config import settings
 from app.domain.claims.outbox import ClaimJobProcessor, SqlAlchemyJobStore
 from ragit.jobs.drainer import main as _ragit_main
 

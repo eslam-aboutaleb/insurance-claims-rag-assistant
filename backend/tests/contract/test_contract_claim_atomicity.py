@@ -81,9 +81,9 @@ def test_prepare_and_confirm_produce_exactly_one_claim(
     user_a: SeededUser,
 ) -> None:
     """One token produces one claim and one embedding job, both committed together."""
-    from app.database import async_session_factory
-    from app.models.claim import Claim
-    from app.models.embedding_job import EmbeddingJob
+    from app.core.database import async_session_factory
+    from app.models.claims.claim import Claim
+    from app.models.claims.embedding_job import EmbeddingJob
     from sqlalchemy import func, select
 
     prepared = test_client.post(
@@ -124,8 +124,8 @@ def test_replayed_confirmation_creates_no_second_claim(
     user_a: SeededUser,
 ) -> None:
     """Replaying a consumed token is rejected and writes nothing further."""
-    from app.database import async_session_factory
-    from app.models.claim import Claim
+    from app.core.database import async_session_factory
+    from app.models.claims.claim import Claim
     from sqlalchemy import func, select
 
     prepared = test_client.post(

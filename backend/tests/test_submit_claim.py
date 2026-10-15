@@ -6,7 +6,7 @@ import pytest
 
 from app.agent.tools.submit_claim import prepare_claim_submission, submit_claim_internal
 from app.api.v1.claims import confirm_claim_submission
-from app.models.claim_submission import ClaimSubmission as ClaimSubmissionModel
+from app.models.claims.claim_submission import ClaimSubmission as ClaimSubmissionModel
 from app.schemas.models import ClaimConfirmationRequest
 
 

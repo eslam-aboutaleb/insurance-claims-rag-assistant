@@ -169,7 +169,7 @@ class TestChatIDOR:
         with patch("app.api.v1.chat.run_agent", new_callable=AsyncMock) as mock_run:
             mock_run.return_value = {"response": "Test", "sources": [], "tool_calls": []}
             # Use a valid user_id in the mock override
-            from app.auth import get_current_user
+            from app.security.auth import get_current_user
             from app.main import app
 
             async def _override():
@@ -190,7 +190,7 @@ class TestChatIDOR:
         """List conversations returns only current user's conversations."""
         from unittest.mock import AsyncMock, MagicMock, patch
 
-        from app.auth import get_current_user
+        from app.security.auth import get_current_user
         from app.main import app
 
         user_id = "00000000-0000-0000-0000-000000000002"
@@ -200,7 +200,7 @@ class TestChatIDOR:
 
         app.dependency_overrides[get_current_user] = _override
         try:
-            with patch("app.database.async_session_factory") as mock_factory:
+            with patch("app.core.database.async_session_factory") as mock_factory:
                 mock_session = AsyncMock()
                 mock_session.add = MagicMock()
                 mock_result = MagicMock()
@@ -245,7 +245,7 @@ class TestTokenForgery:
 
         import jwt
 
-        from app.auth import ALGORITHM, SECRET_KEY
+        from app.security.auth import ALGORITHM, SECRET_KEY
 
         expired_payload = {
             "sub": str(uuid.uuid4()),
@@ -287,7 +287,7 @@ class TestTokenForgery:
 
         import jwt
 
-        from app.auth import ALGORITHM, SECRET_KEY
+        from app.security.auth import ALGORITHM, SECRET_KEY
 
         no_sub_payload = {
             "exp": datetime.now(tz=UTC) + timedelta(hours=1),
@@ -306,7 +306,7 @@ class TestTokenForgery:
 
         import jwt
 
-        from app.auth import ALGORITHM, SECRET_KEY
+        from app.security.auth import ALGORITHM, SECRET_KEY
 
         # Create a valid token for a UUID that doesn't exist in DB
         fake_user_id = str(uuid.uuid4())

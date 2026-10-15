@@ -43,7 +43,7 @@ class TestClaimsAPI:
         assert response.status_code == 500
 
     def test_confirm_claim_invalid_user_returns_401(self, test_client):
-        from app.auth import get_current_user
+        from app.security.auth import get_current_user
         from app.main import app
 
         async def _bad_user():

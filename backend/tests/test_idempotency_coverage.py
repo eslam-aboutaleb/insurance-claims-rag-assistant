@@ -1,4 +1,4 @@
-"""Coverage tests for app.idempotency uncovered paths."""
+"""Coverage tests for app.core.idempotency uncovered paths."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ import pytest
 
 class TestIdempotency:
     def test_idempotent_endpoint_body_mismatch_returns_409(self, test_client, mock_current_user):
-        from app.idempotency import clear_cache, store_response
+        from app.core.idempotency import clear_cache, store_response
 
         clear_cache()
         key = "00000000-0000-0000-0000-000000000001:test-key-bm"
@@ -45,7 +45,7 @@ class TestIdempotency:
 
     @pytest.mark.asyncio
     async def test_idempotency_else_branch_direct(self):
-        from app.idempotency import clear_cache, idempotent_endpoint
+        from app.core.idempotency import clear_cache, idempotent_endpoint
 
         clear_cache()
         call_count = 0
@@ -64,7 +64,7 @@ class TestIdempotency:
 
     @pytest.mark.asyncio
     async def test_idempotency_store_response_dict_without_model_dump(self):
-        from app.idempotency import clear_cache, idempotent_endpoint
+        from app.core.idempotency import clear_cache, idempotent_endpoint
 
         clear_cache()
         call_count = 0
@@ -92,7 +92,7 @@ class TestIdempotency:
 
     @pytest.mark.asyncio
     async def test_idempotency_store_response_model_with_model_dump(self):
-        from app.idempotency import clear_cache, idempotent_endpoint
+        from app.core.idempotency import clear_cache, idempotent_endpoint
 
         clear_cache()
         call_count = 0

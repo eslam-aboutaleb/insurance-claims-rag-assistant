@@ -20,7 +20,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import jwt
 import pytest
 
-from app.auth import (
+from app.security.auth import (
     ACCESS_TOKEN_EXPIRE_MINUTES,
     ALGORITHM,
     COOKIE_NAME,
@@ -37,7 +37,7 @@ from app.auth import (
 @pytest.fixture
 def mock_current_user():
     """Override get_current_user to return a valid UUID instead of test-user-id."""
-    from app.auth import get_current_user
+    from app.security.auth import get_current_user
     from app.main import app
 
     async def _override_get_current_user():
@@ -87,10 +87,10 @@ class TestSignup:
 
         from fastapi import Response
 
-        from app.auth import set_session_cookie
+        from app.security.auth import set_session_cookie
 
         # Test development (secure=False)
-        with patch("app.auth.settings.environment", "dev"):
+        with patch("app.security.auth.settings.environment", "dev"):
             res = Response()
             set_session_cookie(res, "dummy_token")
             # Note: FastAPI/Starlette Response.set_cookie sets the header directly
@@ -98,7 +98,7 @@ class TestSignup:
             assert "Secure" not in header
 
         # Test production (secure=True)
-        with patch("app.auth.settings.environment", "production"):
+        with patch("app.security.auth.settings.environment", "production"):
             res = Response()
             set_session_cookie(res, "dummy_token")
             header = res.headers.get("set-cookie")
@@ -111,7 +111,7 @@ class TestSignup:
         from fastapi import Request
         from fastapi.security import HTTPAuthorizationCredentials
 
-        from app.auth import _resolve_token
+        from app.security.auth import _resolve_token
 
         req = MagicMock(spec=Request)
         req.cookies.get.return_value = "cookie-token"
@@ -126,7 +126,7 @@ class TestSignup:
 
         from fastapi import Request
 
-        from app.auth import _resolve_token
+        from app.security.auth import _resolve_token
 
         req = MagicMock(spec=Request)
         req.cookies.get.return_value = "cookie-token"
@@ -530,7 +530,7 @@ class TestChatAuthIsolation:
         mock_conv.created_at = datetime.now(tz=UTC)
         mock_conv.updated_at = datetime.now(tz=UTC)
 
-        with patch("app.database.async_session_factory") as mock_factory:
+        with patch("app.core.database.async_session_factory") as mock_factory:
             mock_session = AsyncMock()
             mock_result = MagicMock()
             mock_result.scalars.return_value.all.return_value = [mock_conv]
@@ -547,7 +547,7 @@ class TestChatAuthIsolation:
         from unittest.mock import AsyncMock, MagicMock, patch
 
         # Mock returning None (not found or not owned)
-        with patch("app.database.async_session_factory") as mock_factory:
+        with patch("app.core.database.async_session_factory") as mock_factory:
             mock_session = AsyncMock()
             mock_result = MagicMock()
             mock_result.scalar_one_or_none.return_value = None

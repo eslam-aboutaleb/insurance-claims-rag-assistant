@@ -25,11 +25,11 @@ from typing import Any
 
 from sqlalchemy import select, text as sa_text
 
-from app.config import get_settings
-from app.database import async_session_factory
+from app.core.config import get_settings
+from app.core.database import async_session_factory
 from app.domain.policies.retriever import POLICY_RETRIEVER_SPEC
-from app.models.policy import Policy
-from app.models.policy_version import PolicyVersion
+from app.models.policies.policy import Policy
+from app.models.policies.policy_version import PolicyVersion
 from ragit.chunking import (
     MarkdownSectionChunker,
     SlidingWindowChunker,

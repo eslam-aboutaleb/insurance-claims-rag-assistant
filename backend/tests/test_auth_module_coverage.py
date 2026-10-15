@@ -1,4 +1,4 @@
-"""Coverage tests for app.auth uncovered paths."""
+"""Coverage tests for app.security.auth uncovered paths."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from fastapi import HTTPException
 
-from app.auth import (
+from app.security.auth import (
     SECRET_KEY,
     _InvalidTokenError,
     _decode_token,
@@ -65,7 +65,7 @@ class TestAuthModule:
         mock_credentials = MagicMock()
         mock_credentials.credentials = token
 
-        with patch("app.auth.clear_session_cookie") as mock_clear:
+        with patch("app.security.auth.clear_session_cookie") as mock_clear:
             try:
                 await get_current_user(
                     request=MagicMock(),

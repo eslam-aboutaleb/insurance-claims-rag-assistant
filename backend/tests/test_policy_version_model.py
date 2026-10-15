@@ -13,7 +13,7 @@ import pytest
 import pytest_asyncio
 from sqlalchemy import text
 
-from app.database import async_session_factory
+from app.core.database import async_session_factory
 from app.domain.policies.ingestion import PolicyVersionStore
 from ragit.ingestion import IngestionSnapshot
 
@@ -38,7 +38,7 @@ async def clean_policy_tables():
 
 def test_policy_version_effective_from_and_source_hash_non_null():
     """PolicyVersion requires effective_from and source_hash non-null at the ORM level."""
-    from app.models.policy_version import PolicyVersion as PV
+    from app.models.policies.policy_version import PolicyVersion as PV
 
     assert "effective_from" in PV.__table__.c
     assert "source_hash" in PV.__table__.c

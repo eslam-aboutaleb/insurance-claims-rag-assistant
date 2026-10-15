@@ -8,7 +8,7 @@ a deployment from starting with one.
 import pytest
 from pydantic import ValidationError
 
-from app.config import Settings
+from app.core.config import Settings
 
 
 def _production_settings(**overrides) -> Settings:

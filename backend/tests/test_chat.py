@@ -17,8 +17,8 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from app.config import settings
-from app.idempotency import clear_cache
+from app.core.config import settings
+from app.core.idempotency import clear_cache
 from app.schemas.models import ChatResponse
 
 

@@ -19,7 +19,7 @@ from app.workers import embedding_drain
 def test_main_wires_app_store_and_processor_into_ragit_drainer() -> None:
     """The entry point builds the OmniCare store and processor and
     passes the validated drain settings to ragit's drainer."""
-    from app.config import settings
+    from app.core.config import settings
     from app.domain.claims.outbox import ClaimJobProcessor, SqlAlchemyJobStore
 
     with patch.object(embedding_drain, "_ragit_main", return_value=0) as mock_main:
@@ -36,7 +36,7 @@ def test_main_wires_app_store_and_processor_into_ragit_drainer() -> None:
 
 def test_drain_config_comes_from_validated_settings() -> None:
     """The drainer reads its configuration from Settings, not from raw os.environ."""
-    from app.config import settings
+    from app.core.config import settings
 
     assert settings.embedding_drain_interval_seconds > 0.1
     assert settings.embedding_drain_batch_size > 0
@@ -46,7 +46,7 @@ def test_drain_settings_reject_out_of_range_values() -> None:
     """Settings enforce the documented bounds rather than clamping at runtime."""
     from pydantic import ValidationError
 
-    from app.config import Settings
+    from app.core.config import Settings
 
     with pytest.raises(ValidationError):
         Settings(embedding_drain_interval_seconds=0)

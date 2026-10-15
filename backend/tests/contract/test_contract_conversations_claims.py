@@ -43,14 +43,14 @@ def _dump_users() -> str:
 
     from sqlalchemy import text
 
-    from app.database import async_session_factory
+    from app.core.database import async_session_factory
 
     async def _read() -> list[str]:
         async with async_session_factory() as session:
             rows = await session.execute(text("SELECT username FROM users ORDER BY username"))
             return list(rows.scalars())
 
-    from app.database import engine
+    from app.core.database import engine
 
     async def _run() -> list[str]:
         await engine.dispose()

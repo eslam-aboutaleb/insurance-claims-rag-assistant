@@ -21,9 +21,9 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.api.v1.claims import router as claims_router
-from app.auth import create_access_token
-from app.database import async_session_factory, engine
-from app.models.claim import Claim
+from app.security.auth import create_access_token
+from app.core.database import async_session_factory, engine
+from app.models.claims.claim import Claim
 from app.models.user import User
 
 _TEST_PASSWORD = "ReadApiPass123!"  # noqa: S105 - fixture credential, not a secret

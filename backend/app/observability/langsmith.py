@@ -50,7 +50,7 @@ from typing import Any, TypeVar
 
 import litellm
 
-from app.config import settings
+from app.core.config import settings
 from app.observability.request_context import get_request_id
 
 logger = logging.getLogger(__name__)

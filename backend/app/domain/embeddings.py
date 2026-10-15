@@ -10,8 +10,8 @@ ragit, being domain-agnostic, cannot import itself.
 
 from __future__ import annotations
 
-from app.config import get_settings
-from app.database import async_session_factory
+from app.core.config import get_settings
+from app.core.database import async_session_factory
 from ragit.embeddings import (
     EmbeddingFunction,
     LitellmEmbeddingFunction,

@@ -32,13 +32,13 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth import require_role
-from app.database import get_db
-from app.models.answer_feedback import AnswerFeedback
-from app.models.audit_event import AuditEvent
-from app.models.claim import Claim
-from app.models.conversation_message import ConversationMessage
-from app.models.embedding_job import EmbeddingJob
+from app.security.auth import require_role
+from app.core.database import get_db
+from app.models.conversations.answer_feedback import AnswerFeedback
+from app.models.platform.audit_event import AuditEvent
+from app.models.claims.claim import Claim
+from app.models.conversations.conversation_message import ConversationMessage
+from app.models.claims.embedding_job import EmbeddingJob
 from app.models.user import User
 
 # The router carries the ``/admin`` segment itself, so the include site -- the

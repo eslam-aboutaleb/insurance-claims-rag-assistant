@@ -16,9 +16,9 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from app.database import async_session_factory
-from app.models.claim import Claim
-from app.models.embedding_job import EmbeddingJob
+from app.core.database import async_session_factory
+from app.models.claims.claim import Claim
+from app.models.claims.embedding_job import EmbeddingJob
 from app.models.user import User
 from app.domain.claims.outbox import process_pending_jobs
 

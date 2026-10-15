@@ -7,17 +7,12 @@ from typing import Any
 from sqlalchemy import pool
 from sqlalchemy.ext.asyncio import create_async_engine
 
-import app.models.claim  # noqa: F401
-import app.models.conversation  # noqa: F401
-import app.models.policy  # noqa: F401
-import app.models.policy_chunk  # noqa: F401
-import app.models.policy_version  # noqa: F401
-
-# Import models so that Base.metadata is fully populated before migrations run.
-# These imports have no other side-effects; they are required for autogenerate.
-import app.models.user  # noqa: F401
+# Importing the models package imports every model module, which is what
+# registers all tables on Base.metadata for autogenerate. One import cannot
+# drift the way a hand-maintained list of model modules did.
+import app.models  # noqa: F401
 from alembic import context
-from app.database import DATABASE_URL
+from app.core.database import DATABASE_URL
 from app.models.base import Base
 
 # this is the Alembic Config object, which provides

@@ -22,7 +22,7 @@ from unittest.mock import patch
 
 import pytest
 
-from app.config import settings
+from app.core.config import settings
 from app.observability.langsmith import DEFAULT_LANGSMITH_ENDPOINT
 from app.observability.metrics import build_llm_call, build_tool_call, reset_metrics
 from app.observability.request_context import (
@@ -507,7 +507,7 @@ class TestToolInstrumentation:
 class TestRateLimitTelemetry:
     def test_rejection_is_recorded_with_the_route(self):
         from app.observability.metrics import get_metrics
-        from app.rate_limiter import record_rate_limit_rejection
+        from app.core.rate_limiter import record_rate_limit_rejection
 
         token = set_request_id("trace-limited")
         try:
@@ -586,8 +586,8 @@ class TestDetailedHealth:
         )
 
     def test_detailed_health_reports_outbox_depth_and_backlog(self, test_client):
-        from app.database import async_session_factory
-        from app.models.embedding_job import EmbeddingJob
+        from app.core.database import async_session_factory
+        from app.models.claims.embedding_job import EmbeddingJob
         from app.models.user import User
 
         async def _seed() -> None:

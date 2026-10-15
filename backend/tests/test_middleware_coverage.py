@@ -1,4 +1,4 @@
-"""Coverage tests for app.middleware uncovered paths."""
+"""Coverage tests for app.core.middleware uncovered paths."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 class TestMiddleware:
     def test_request_size_limit_content_length_value_error(self):
-        from app.middleware import RequestSizeLimitMiddleware
+        from app.core.middleware import RequestSizeLimitMiddleware
 
         middleware = RequestSizeLimitMiddleware(MagicMock(), max_upload_size=1024)
         request = MagicMock()
@@ -25,7 +25,7 @@ class TestMiddleware:
         assert response.status_code == 200
 
     def test_request_size_limit_no_content_length_exceeds(self):
-        from app.middleware import RequestSizeLimitMiddleware
+        from app.core.middleware import RequestSizeLimitMiddleware
 
         middleware = RequestSizeLimitMiddleware(MagicMock(), max_upload_size=10)
         request = MagicMock()
@@ -35,7 +35,7 @@ class TestMiddleware:
         assert response.status_code == 413
 
     def test_request_size_limit_exceeded_returns_413(self):
-        from app.middleware import RequestSizeLimitMiddleware
+        from app.core.middleware import RequestSizeLimitMiddleware
 
         middleware = RequestSizeLimitMiddleware(MagicMock(), max_upload_size=10)
         request = MagicMock()

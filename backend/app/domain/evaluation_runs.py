@@ -120,7 +120,7 @@ async def ensure_eval_runs_table() -> None:
     Raises whatever the database raises; the caller decides whether a storage
     failure is fatal.
     """
-    from app.database import engine  # noqa: PLC0415
+    from app.core.database import engine  # noqa: PLC0415
 
     async with engine.begin() as connection:
         await connection.run_sync(metadata.create_all)
@@ -152,7 +152,7 @@ async def record_eval_run(
     if not persistence_enabled():
         return None
 
-    from app.database import async_session_factory  # noqa: PLC0415
+    from app.core.database import async_session_factory  # noqa: PLC0415
 
     await ensure_eval_runs_table()
 
@@ -230,7 +230,7 @@ async def list_eval_runs(limit: int = 20) -> list[dict[str, Any]]:
     if not persistence_enabled():
         return []
 
-    from app.database import async_session_factory  # noqa: PLC0415
+    from app.core.database import async_session_factory  # noqa: PLC0415
 
     await ensure_eval_runs_table()
     statement = (
@@ -281,7 +281,7 @@ async def delete_eval_runs(git_sha: str | None = None) -> int:
 
     from sqlalchemy import delete  # noqa: PLC0415
 
-    from app.database import async_session_factory  # noqa: PLC0415
+    from app.core.database import async_session_factory  # noqa: PLC0415
 
     async with async_session_factory() as session:
         statement = delete(eval_runs)

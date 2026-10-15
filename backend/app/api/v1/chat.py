@@ -42,10 +42,10 @@ from fastapi import (
 
 from app.agent.agent import reset_user_session, run_agent
 from app.agent.conversation_store import SavedMessageIds, save_conversation_turn
-from app.auth import get_current_user
-from app.config import Settings, get_settings
-from app.idempotency import idempotent_endpoint
-from app.rate_limiter import limiter
+from app.security.auth import get_current_user
+from app.core.config import Settings, get_settings
+from app.core.idempotency import idempotent_endpoint
+from app.core.rate_limiter import limiter
 from app.schemas.models import ChatRequest, ChatResponse, ErrorResponse
 
 logger = logging.getLogger(__name__)

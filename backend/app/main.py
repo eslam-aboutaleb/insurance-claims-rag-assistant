@@ -27,9 +27,9 @@ from slowapi.middleware import SlowAPIMiddleware
 
 from app.agent.agent import configure_llm, warm_session_service
 from app.api.v1.router import router as v1_router
-from app.config import get_settings
-from app.idempotency import configure_idempotency_storage
-from app.middleware import RequestSizeLimitMiddleware
+from app.core.config import get_settings
+from app.core.idempotency import configure_idempotency_storage
+from app.core.middleware import RequestSizeLimitMiddleware
 from app.domain.policies.ingestion import ingest_policy
 from app.domain.procedures.ingestion import (
     ingest_procedures,
@@ -41,7 +41,7 @@ from app.observability.logging_config import configure_logging
 from app.observability.middleware import RequestIdMiddleware
 from app.observability.routes import router as observability_router
 from app.observability.tool_instrumentation import install_tool_instrumentation
-from app.rate_limiter import limiter, record_rate_limit_rejection
+from app.core.rate_limiter import limiter, record_rate_limit_rejection
 from app.schemas.models import ErrorDetail, ErrorResponse
 
 # Load centralized settings
@@ -219,7 +219,7 @@ async def lifespan(app: FastAPI):
     yield  # Server is running and receiving traffic
 
     logger.info(f"Shutting down {settings.app_name}...")
-    from app.database import engine  # noqa: PLC0415
+    from app.core.database import engine  # noqa: PLC0415
 
     await engine.dispose()
 

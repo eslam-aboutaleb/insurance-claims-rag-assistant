@@ -18,12 +18,12 @@ from datetime import UTC, datetime
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
-from app.auth import get_current_user
-from app.database import async_session_factory, engine
-from app.models.answer_feedback import AnswerFeedback
-from app.models.audit_event import AuditEvent
-from app.models.conversation import Conversation
-from app.models.conversation_message import ConversationMessage
+from app.security.auth import get_current_user
+from app.core.database import async_session_factory, engine
+from app.models.conversations.answer_feedback import AnswerFeedback
+from app.models.platform.audit_event import AuditEvent
+from app.models.conversations.conversation import Conversation
+from app.models.conversations.conversation_message import ConversationMessage
 
 _TEST_PASSWORD = "FeedbackCoverage123!"  # noqa: S105 - fixture credential, not a secret
 _MAX_COMMENT_LENGTH = 1000

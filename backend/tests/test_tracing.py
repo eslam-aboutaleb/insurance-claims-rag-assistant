@@ -23,7 +23,7 @@ import litellm
 import pytest
 
 from app.agent.agent import run_agent, run_agent_stream
-from app.config import settings
+from app.core.config import settings
 from app.observability.langsmith import (
     _TURN_IDENTITY,
     _summarize_stream_frames,

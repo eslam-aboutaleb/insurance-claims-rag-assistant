@@ -90,7 +90,7 @@ def _resolve_test_database_url() -> str:
 
 # Each request runs on the ``TestClient`` portal loop while the database fixtures
 # reset the schema on their own ``asyncio.run`` loop. NullPool removes the pooled
-# connection hand-off between those loops; see app/database.py.
+# connection hand-off between those loops; see app/core/database.py.
 os.environ["OMNICARE_TEST_NULLPOOL"] = "1"
 # The NullPool selection is gated on ENVIRONMENT=test so a stray value cannot turn it on
 # in a deployment, which means the suite must declare that tier for itself.
@@ -115,7 +115,7 @@ async def _read_server_identity() -> str:
     """Return a string identifying the PostgreSQL server behind the engine."""
     from sqlalchemy import text  # noqa: PLC0415
 
-    from app.database import async_session_factory  # noqa: PLC0415
+    from app.core.database import async_session_factory  # noqa: PLC0415
 
     async with async_session_factory() as session:
         row = await session.execute(
@@ -163,7 +163,7 @@ if str(BACKEND_DIR) not in sys.path:
 # Patch ingest_policy to avoid network calls during test client startup.
 # Import and keep the real function before patching so e2e tests can use it.
 import app.main as _app_main_module  # noqa: E402, PLC0415
-from app.config import settings  # noqa: E402
+from app.core.config import settings  # noqa: E402
 
 _real_ingest_policy = _app_main_module.ingest_policy
 _ingest_policy_patcher = patch(
@@ -234,7 +234,7 @@ def test_client(sample_claims_path):
     """
     from fastapi.testclient import TestClient  # noqa: PLC0415
 
-    from app.database import engine  # noqa: PLC0415
+    from app.core.database import engine  # noqa: PLC0415
     from app.main import app  # noqa: PLC0415
 
     with TestClient(app) as client:
@@ -271,7 +271,7 @@ def test_client(sample_claims_path):
 def _reset_engine():
     yield
     try:
-        from app.database import engine  # noqa: PLC0415
+        from app.core.database import engine  # noqa: PLC0415
 
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", DeprecationWarning)
@@ -297,7 +297,7 @@ def _reset_engine():
 @pytest.fixture(scope="function", autouse=True)
 def _clear_idempotency_cache():
     """Clear the idempotency cache between tests to ensure isolation."""
-    from app.idempotency import clear_cache  # noqa: PLC0415
+    from app.core.idempotency import clear_cache  # noqa: PLC0415
 
     yield
     clear_cache()
@@ -360,7 +360,7 @@ async def _delete_all_rows() -> None:
     """
     from sqlalchemy import text  # noqa: PLC0415
 
-    from app.database import async_session_factory  # noqa: PLC0415
+    from app.core.database import async_session_factory  # noqa: PLC0415
 
     async with async_session_factory() as session:
         await session.execute(text("SET LOCAL lock_timeout = '5s'"))
@@ -434,7 +434,7 @@ def _reset_database(_attempts: int = 5) -> None:
     a deadlock or lock race against them. Retrying with a short backoff settles
     that contention instead of failing a test that did nothing wrong.
     """
-    from app.database import engine  # noqa: PLC0415
+    from app.core.database import engine  # noqa: PLC0415
 
     async def _run() -> None:
         await engine.dispose()
@@ -518,7 +518,7 @@ async def db_session() -> AsyncIterator:
     """
     from sqlalchemy.ext.asyncio import AsyncSession  # noqa: PLC0415
 
-    from app.database import engine  # noqa: PLC0415
+    from app.core.database import engine  # noqa: PLC0415
 
     async with engine.connect() as connection:
         outer_transaction = await connection.begin()
@@ -544,7 +544,7 @@ def mock_current_user():
     header validation, but the fixture is available for tests that want to pass
     explicit headers).
     """
-    from app.auth import get_current_user  # noqa: PLC0415
+    from app.security.auth import get_current_user  # noqa: PLC0415
     from app.main import app  # noqa: PLC0415
 
     async def _override_get_current_user():

@@ -22,10 +22,10 @@ from sqlalchemy import delete, desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agent.agent import delete_user_session
-from app.auth import get_current_user
-from app.database import get_db
-from app.models.conversation import Conversation
-from app.models.conversation_message import ConversationMessage
+from app.security.auth import get_current_user
+from app.core.database import get_db
+from app.models.conversations.conversation import Conversation
+from app.models.conversations.conversation_message import ConversationMessage
 from app.schemas.models import (
     ConversationDetailResponse,
     ConversationListResponse,

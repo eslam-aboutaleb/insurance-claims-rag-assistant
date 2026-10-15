@@ -33,7 +33,7 @@ from unittest.mock import patch
 
 import pytest
 
-from app.idempotency import build_redis_backend
+from app.core.idempotency import build_redis_backend
 
 
 # ── In-process Redis stand-in ─────────────────────────────────────────────────
@@ -338,8 +338,8 @@ def wired_idempotency(test_client, fake_redis: _FakeRedisServer, monkeypatch) ->
     the loop that serves the request opens its own. Depending on ``test_client``
     guarantees the application has already started.
     """
-    from app.config import settings
-    from app.idempotency import _reset_backend_for_tests, configure_idempotency_storage
+    from app.core.config import settings
+    from app.core.idempotency import _reset_backend_for_tests, configure_idempotency_storage
 
     monkeypatch.setattr(settings, "idempotency_storage", "redis")
     monkeypatch.setattr(settings, "redis_url", fake_redis.url)
@@ -417,8 +417,8 @@ async def test_claim_waits_stop_once_the_claim_disappears(redis_backends) -> Non
 @pytest.mark.asyncio
 async def test_backend_is_redis_when_configured(fake_redis, monkeypatch) -> None:
     """The startup wiring selects Redis when the settings ask for it."""
-    from app.config import settings
-    from app.idempotency import configure_idempotency_storage, uses_distributed_store
+    from app.core.config import settings
+    from app.core.idempotency import configure_idempotency_storage, uses_distributed_store
 
     monkeypatch.setattr(settings, "idempotency_storage", "redis")
     monkeypatch.setattr(settings, "redis_url", fake_redis.url)
@@ -431,8 +431,8 @@ async def test_backend_is_redis_when_configured(fake_redis, monkeypatch) -> None
 @pytest.mark.asyncio
 async def test_backend_stays_in_process_when_redis_url_is_invalid(monkeypatch) -> None:
     """An unusable Redis URI leaves the in-process cache in place."""
-    from app.config import settings
-    from app.idempotency import configure_idempotency_storage, uses_distributed_store
+    from app.core.config import settings
+    from app.core.idempotency import configure_idempotency_storage, uses_distributed_store
 
     monkeypatch.setattr(settings, "idempotency_storage", "redis")
     monkeypatch.setattr(settings, "redis_url", "not-a-redis-url")
@@ -446,8 +446,8 @@ async def test_backend_stays_in_process_when_redis_url_is_invalid(monkeypatch) -
 async def test_backend_falls_back_when_redis_is_unreachable(monkeypatch) -> None:
     """Redis that does not answer leaves the in-process cache in place."""
     # Nothing is listening on this address, so the startup probe fails.
-    from app.config import settings
-    from app.idempotency import configure_idempotency_storage, uses_distributed_store
+    from app.core.config import settings
+    from app.core.idempotency import configure_idempotency_storage, uses_distributed_store
 
     monkeypatch.setattr(settings, "idempotency_storage", "redis")
     monkeypatch.setattr(settings, "redis_url", "redis://127.0.0.1:1/0")
@@ -530,7 +530,7 @@ def test_replayed_response_is_marked_over_redis(
 
 def test_rate_limit_counters_are_shared_between_instances(fake_redis) -> None:
     """One limiter instance spends the budget another instance reads."""
-    from app.rate_limiter import RedisRateLimitStorage
+    from app.core.rate_limiter import RedisRateLimitStorage
 
     first = RedisRateLimitStorage(fake_redis.url)
     second = RedisRateLimitStorage(fake_redis.url)
@@ -549,8 +549,8 @@ def test_rate_limiter_falls_back_when_redis_url_is_unusable(monkeypatch) -> None
     """A Redis URI that cannot become a storage keeps the in-process limiter."""
     from limits.storage import MemoryStorage
 
-    from app import rate_limiter
-    from app.rate_limiter import RedisRateLimitStorage
+    from app.core import rate_limiter
+    from app.core.rate_limiter import RedisRateLimitStorage
 
     monkeypatch.setattr(rate_limiter.settings, "rate_limit_storage", "redis")
     monkeypatch.setattr(rate_limiter.settings, "redis_url", "unparseable-url")

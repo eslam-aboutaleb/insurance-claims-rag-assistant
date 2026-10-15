@@ -2,7 +2,7 @@
 
 Submodules are imported directly by their consumers so that importing this
 package stays cheap. ``app.main`` takes the logging and request plumbing,
-``app.rate_limiter`` only needs the metrics store, and the LiteLLM callback is
+``app.core.rate_limiter`` only needs the metrics store, and the LiteLLM callback is
 loaded once lifespan confirms cost tracking is enabled.
 
 Tracing is the exception worth naming: consumers import

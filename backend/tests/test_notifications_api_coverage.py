@@ -18,9 +18,9 @@ from datetime import UTC, datetime, timedelta
 
 from fastapi.testclient import TestClient
 
-from app.auth import get_current_user
-from app.database import async_session_factory, engine
-from app.models.notification_job import JOB_TYPE_CLAIM_STATUS_CHANGED, Notification, NotificationJob
+from app.security.auth import get_current_user
+from app.core.database import async_session_factory, engine
+from app.models.platform.notification_job import JOB_TYPE_CLAIM_STATUS_CHANGED, Notification, NotificationJob
 
 _TEST_PASSWORD = "NotifyCoverage123!"  # noqa: S105 - fixture credential, not a secret
 _PINNED_EPOCH = datetime(2026, 5, 1, tzinfo=UTC)

@@ -72,7 +72,7 @@ graph TD
 | Component                   | Path                                                                                                               | Responsibility                                                                                                                      |
 | --------------------------- | ------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------- |
 | **Application Entrypoint**  | [`app/main.py`](file:///Users/eslamaboutaleb/Documents/omnicare-financial/backend/app/main.py)                     | Initializes FastAPI, mounts CORS middleware, executes startup RAG ingestion, and binds API routes.                                  |
-| **Configuration Core**      | [`app/config.py`](file:///Users/eslamaboutaleb/Documents/omnicare-financial/backend/app/config.py)                 | Centralized, type-safe environment configuration powered by Pydantic v2 `SettingsConfigDict` and `@lru_cache` dependency injection. |
+| **Configuration Core**      | [`app/core/config.py`](file:///Users/eslamaboutaleb/Documents/insurance-claims-rag-assistant/backend/app/core/config.py)                 | Centralized, type-safe environment configuration powered by Pydantic v2 `SettingsConfigDict` and `@lru_cache` dependency injection. |
 | **API Endpoints**           | [`app/api/v1/`](file:///Users/eslamaboutaleb/Documents/omnicare-financial/backend/app/api/v1)                      | Declares versioned HTTP endpoints (`/health`, `/chat`) with strict semantic status codes and OpenAPI schema documentation.          |
 | **Data Schemas**            | [`app/schemas/models.py`](file:///Users/eslamaboutaleb/Documents/omnicare-financial/backend/app/schemas/models.py) | Pydantic request, response, error envelopes, and tool data models.                                                                  |
 | **Agent Core**              | [`app/agent/agent.py`](file:///Users/eslamaboutaleb/Documents/omnicare-financial/backend/app/agent/agent.py)       | Sets up Google ADK `LlmAgent`, `Runner`, session handling, event streaming, and tool resolution.                                    |
@@ -235,7 +235,7 @@ Processes conversational queries through the OmniCare agent.
 
 ## 4. Configuration Management
 
-Configuration is strictly centralized in [`app/config.py`](file:///Users/eslamaboutaleb/Documents/omnicare-financial/backend/app/config.py) using **Pydantic v2 `BaseSettings`** and **`SettingsConfigDict`**. No raw `os.getenv` calls are permitted across application modules.
+Configuration is strictly centralized in [`app/core/config.py`](file:///Users/eslamaboutaleb/Documents/insurance-claims-rag-assistant/backend/app/core/config.py) using **Pydantic v2 `BaseSettings`** and **`SettingsConfigDict`**. No raw `os.getenv` calls are permitted across application modules.
 
 ### Environment Variables Matrix
 
@@ -261,13 +261,13 @@ Configuration is strictly centralized in [`app/config.py`](file:///Users/eslamab
 
 The vector dimension is owned by [`app/rag/embedding_dimensions.py`](app/rag/embedding_dimensions.py). Call `get_embedding_dimension()` rather than hardcoding `1536`; it resolves the dimension for the configured `EMBEDDING_MODEL` and is the single source of truth used by ingestion, retrieval, and the vector stores. Vectors are checked by `pgvector_store._validate_embedding`, which every write and query path must call.
 
-The two pgvector columns are still declared with a literal `Vector(1536)` in `app/models/claim.py` and `app/models/policy_chunk.py`. Widening or narrowing the stored column requires an `ALTER TABLE` migration and is not covered by the runtime check, so treat a change of `EMBEDDING_MODEL` as a schema migration, not a configuration change.
+The two pgvector columns are still declared with a literal `Vector(1536)` in `app/models/claims/claim.py` and `app/models/policies/policy_chunk.py`. Widening or narrowing the stored column requires an `ALTER TABLE` migration and is not covered by the runtime check, so treat a change of `EMBEDDING_MODEL` as a schema migration, not a configuration change.
 
 FastAPI endpoints consume settings through `Depends(get_settings)`:
 
 ```python
 from fastapi import APIRouter, Depends
-from app.config import Settings, get_settings
+from app.core.config import Settings, get_settings
 
 router = APIRouter()
 
@@ -384,7 +384,7 @@ fixed by the current work; each names what closing it would involve.
 
 ### A. pgvector column dimensions are still literals
 
-`app/models/claim.py` and `app/models/policy_chunk.py` declare `Vector(1536)` directly
+`app/models/claims/claim.py` and `app/models/policies/policy_chunk.py` declare `Vector(1536)` directly
 instead of deriving it from `app/rag/embedding_dimensions.py`. The runtime dimension is
 now checked centrally, but changing `EMBEDDING_MODEL` to a model of a different width
 still requires an `ALTER TABLE` migration for both tables. Until that migration exists,

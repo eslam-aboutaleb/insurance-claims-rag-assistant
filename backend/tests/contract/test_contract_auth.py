@@ -138,7 +138,7 @@ def test_me_with_nonexistent_subject_is_401(contract_client: TestClient) -> None
 
     import jwt
 
-    from app.auth import ALGORITHM, SECRET_KEY
+    from app.security.auth import ALGORITHM, SECRET_KEY
 
     token = jwt.encode(
         {"sub": str(uuid.uuid4()), "exp": 9999999999},

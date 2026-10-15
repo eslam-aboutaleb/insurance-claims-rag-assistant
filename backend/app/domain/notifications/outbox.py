@@ -47,8 +47,8 @@ from typing import Any
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.database import async_session_factory
-from app.models.notification_job import (
+from app.core.database import async_session_factory
+from app.models.platform.notification_job import (
     CHANNEL_IN_APP,
     JOB_TYPE_CLAIM_STATUS_CHANGED,
     JOB_TYPE_CLAIM_SUBMITTED,
@@ -192,7 +192,7 @@ class NotificationJobStore:
         from sqlalchemy import select  # noqa: PLC0415
 
         if stale_after_seconds is None:
-            from app.config import settings  # noqa: PLC0415
+            from app.core.config import settings  # noqa: PLC0415
 
             stale_after_seconds = settings.job_stale_after_seconds
 
@@ -578,7 +578,7 @@ async def process_pending_notification_jobs(
     Returns:
         int: Number of jobs successfully delivered.
     """
-    from app.config import settings  # noqa: PLC0415
+    from app.core.config import settings  # noqa: PLC0415
 
     if worker_id is None:
         worker_id = settings.worker_id
@@ -612,7 +612,7 @@ async def reclaim_stale_notification_jobs(
         int: Number of jobs reclaimed.
     """
     if stale_after_seconds is None:
-        from app.config import settings  # noqa: PLC0415
+        from app.core.config import settings  # noqa: PLC0415
 
         stale_after_seconds = settings.job_stale_after_seconds
 

@@ -19,11 +19,11 @@ from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agent.context import current_user_id
-from app.database import async_session_factory
-from app.models.claim import Claim
-from app.models.claim_event import ClaimStatus
-from app.models.claim_submission import ClaimSubmission as ClaimSubmissionModel
-from app.models.embedding_job import EmbeddingJob
+from app.core.database import async_session_factory
+from app.models.claims.claim import Claim
+from app.models.claims.claim_event import ClaimStatus
+from app.models.claims.claim_submission import ClaimSubmission as ClaimSubmissionModel
+from app.models.claims.embedding_job import EmbeddingJob
 from app.schemas.models import ClaimSubmission
 
 logger = logging.getLogger(__name__)

@@ -33,9 +33,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
 from app.agent.context import current_user_id
-from app.models.audit_event import AuditEvent
-from app.models.claim import Claim
-from app.models.claim_event import ClaimEvent, ClaimStatus
+from app.models.claims.claim import Claim
+from app.models.claims.claim_event import ClaimEvent, ClaimStatus
+from app.models.platform.audit_event import AuditEvent
 from app.observability.request_context import get_request_id
 
 logger = logging.getLogger(__name__)

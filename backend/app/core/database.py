@@ -21,7 +21,7 @@ from collections.abc import AsyncGenerator
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
-from app.config import settings
+from app.core.config import settings
 
 # Database URL resolved from centralized Pydantic settings.
 DATABASE_URL = settings.database_url
@@ -77,27 +77,16 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
 async def create_all_tables():
     """Create all tables defined by SQLAlchemy ORM models.
 
-    Imports are performed inside the function body to guarantee that the
-    declarative base metadata is fully populated before ``create_all`` is
-    called. Without this ordering, ``create_all`` would silently create no
-    tables because the model subclasses would not yet be registered.
+    Importing ``app.models`` inside the function body imports every model
+    module, which is what guarantees the declarative base metadata is fully
+    populated before ``create_all`` runs. Without that ordering, ``create_all``
+    would silently create no tables because the model subclasses would not yet
+    be registered.
 
     Intended for development and CI setup. In production, use Alembic
     migrations instead.
     """
-    import app.models.claim  # noqa: F401, PLC0415
-    import app.models.claim_submission  # noqa: F401, PLC0415
-    import app.models.conversation  # noqa: F401, PLC0415
-    import app.models.conversation_message  # noqa: F401, PLC0415
-    import app.models.embedding_job  # noqa: F401, PLC0415
-    import app.models.policy  # noqa: F401, PLC0415
-    import app.models.policy_chunk  # noqa: F401, PLC0415
-    import app.models.policy_version  # noqa: F401, PLC0415
-
-    # Import models to register them with SQLAlchemy's declarative base.
-    # These imports have no other side-effects; they are required so that
-    # Base.metadata contains all table definitions before create_all runs.
-    import app.models.user  # noqa: F401, PLC0415
+    import app.models  # noqa: F401, PLC0415
     from app.models.base import Base  # noqa: PLC0415
 
     async with engine.begin() as conn:

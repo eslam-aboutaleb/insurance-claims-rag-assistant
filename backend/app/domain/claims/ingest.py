@@ -15,9 +15,9 @@ import uuid
 
 from sqlalchemy import select
 
-from app.database import async_session_factory
+from app.core.database import async_session_factory
 from app.domain.claims.retriever import CLAIMS_RETRIEVER_SPEC
-from app.models.claim import Claim
+from app.models.claims.claim import Claim
 from app.domain.embeddings import EmbeddingFactory, get_vector_store
 from ragit.embeddings import get_embedding_dimension
 from ragit.validation import validate_embedding
@@ -47,7 +47,7 @@ async def ingest_claim(  # noqa: PLR0913, PLR0917
         status: Current processing status.
         amount: Claimed amount in US dollars.
     """
-    from app.config import get_settings  # noqa: PLC0415
+    from app.core.config import get_settings  # noqa: PLC0415
 
     embed_fn = EmbeddingFactory.get_embedding_function()
     text_content = f"Claim {claim_id}: {claim_type} - {description}"

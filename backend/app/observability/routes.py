@@ -18,8 +18,8 @@ from fastapi import APIRouter, Response, status
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 
-from app.database import async_session_factory, engine
-from app.models.embedding_job import EmbeddingJob
+from app.core.database import async_session_factory, engine
+from app.models.claims.embedding_job import EmbeddingJob
 from app.observability.metrics import DEFAULT_WINDOW_SECONDS, get_metrics
 from app.observability.tracing import tracing_status
 
