@@ -128,7 +128,7 @@ class Settings(BaseSettings):
 
     # Mock Data Store Paths
     policy_file_path: str = Field(
-        default=str(Path(__file__).parent / "data" / "sample_policy.md"),
+        default=str(Path(__file__).resolve().parents[1] / "data" / "sample_policy.md"),
         description="Filesystem path to master policy markdown document",
     )
 
