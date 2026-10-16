@@ -250,9 +250,36 @@ async def eval_corpus() -> int:
     corpus. Ingesting here rather than reusing a preloaded corpus keeps the gate
     independent of whichever suite ran last against the shared database.
     """
+    from pathlib import Path  # noqa: PLC0415
+
+    from sqlalchemy import text  # noqa: PLC0415
+
+    from app.core.database import async_session_factory  # noqa: PLC0415
     from app.domain.policies.ingestion import ingest_policy  # noqa: PLC0415
 
-    return await ingest_policy()
+    # Pin the golden evaluation corpus independently of deployment overrides.
+    corpus = Path(__file__).resolve().parents[1] / "app" / "data" / "sample_policy.md"
+    assert corpus.is_file(), f"RAG evaluation corpus missing: {corpus}"
+    assert corpus.read_text(encoding="utf-8").strip(), (
+        f"RAG evaluation corpus is empty: {corpus}"
+    )
+    ingested = await ingest_policy(str(corpus))
+    assert ingested > 0, f"RAG evaluation ingested zero policy chunks from {corpus}"
+
+    async with async_session_factory() as session:
+        indexed = (
+            await session.execute(text("SELECT COUNT(*) FROM policy_chunks"))
+        ).scalar_one()
+        documents = (
+            await session.execute(
+                text("SELECT COUNT(DISTINCT policy_version_id) FROM policy_chunks")
+            )
+        ).scalar_one()
+    assert documents > 0 and indexed > 0, (
+        "RAG evaluation preflight failed: no policy documents or chunks indexed "
+        f"(documents={documents}, chunks={indexed}, corpus={corpus})"
+    )
+    return indexed
 
 
 @pytest_asyncio.fixture
