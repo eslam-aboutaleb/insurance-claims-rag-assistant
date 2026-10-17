@@ -267,13 +267,9 @@ async def eval_corpus() -> int:
     assert ingested > 0, f"RAG evaluation ingested zero policy chunks from {corpus}"
 
     async with async_session_factory() as session:
-        indexed = (
-            await session.execute(text("SELECT COUNT(*) FROM policy_chunks"))
-        ).scalar_one()
+        indexed = (await session.execute(text("SELECT COUNT(*) FROM policy_chunks"))).scalar_one()
         documents = (
-            await session.execute(
-                text("SELECT COUNT(DISTINCT policy_version_id) FROM policy_chunks")
-            )
+            await session.execute(text("SELECT COUNT(DISTINCT policy_version_id) FROM policy_chunks"))
         ).scalar_one()
     assert documents > 0 and indexed > 0, (
         "RAG evaluation preflight failed: no policy documents or chunks indexed "
