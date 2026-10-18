@@ -1,8 +1,8 @@
 """
-Tests for app.domain.policies.ingestion -- the adapter over ragit.
+Tests for app.domain.policies.ingestion -- the adapter over ragnor.
 
-The advisory lock and the ingestion logic live in :class:`ragit.ingestion.IngestionPipeline`
-(tested in ``libs/ragit/tests``: ``test_ingestion_locking.py`` and ``test_ingestion_pipeline.py``).
+The advisory lock and the ingestion logic live in :class:`ragnor.ingestion.IngestionPipeline`
+(tested in ``libs/ragnor/tests``: ``test_ingestion_locking.py`` and ``test_ingestion_pipeline.py``).
 These tests verify the adapter wiring only: that ``ingest_policy`` builds the pipeline, binds the
 policy file as the document source, and passes the policy path as the advisory-lock key so
 concurrent ingestion of the same policy stays serialized.
@@ -21,7 +21,7 @@ async def test_ingest_policy_runs_pipeline_with_advisory_lock_key():
 
     The advisory lock is acquired because ``lock_key`` is
     passed to ``pipeline.run``; the lock itself is
-    implemented and tested in ragit.
+    implemented and tested in ragnor.
     """
     policy_path = "/tmp/policy.md"
 

@@ -14,7 +14,8 @@ class TestRateLimiter:
         request.headers.get.return_value = None
         request.cookies.get.return_value = "valid-jwt-token"
         with patch(
-            "app.security.auth._decode_token", return_value=uuid.UUID("00000000-0000-0000-0000-000000000001")
+            "app.security.auth._decode_token",
+            return_value=uuid.UUID("00000000-0000-0000-0000-000000000001"),
         ):
             key = _user_or_ip_key_func(request)
         assert key == "user:00000000-0000-0000-0000-000000000001"

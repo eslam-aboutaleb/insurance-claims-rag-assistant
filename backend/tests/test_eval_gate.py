@@ -55,8 +55,8 @@ from app.domain.evaluation import (
     states_coverage_claim,
 )
 from app.domain.evaluation_cli import format_summary
-from ragit.evaluation.dataset import EvalSample
-from ragit.evaluation.runner import EvalResult
+from ragnor.evaluation.dataset import EvalSample
+from ragnor.evaluation.runner import EvalResult
 
 EMBEDDING_DIM = 1536
 

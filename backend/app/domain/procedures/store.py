@@ -1,9 +1,9 @@
-"""Procedure playbook version storage for the ragit ingestion pipeline.
+"""Procedure playbook version storage for the ragnor ingestion pipeline.
 
-The ``procedure_versions`` table is application-side storage: ragit's
-:class:`ragit.ingestion.IngestionPipeline` orchestrates
+The ``procedure_versions`` table is application-side storage: ragnor's
+:class:`ragnor.ingestion.IngestionPipeline` orchestrates
 load/hash/compare/retire/chunk/embed/upsert and talks to a
-:class:`ragit.ingestion.VersionStore` protocol, which
+:class:`ragnor.ingestion.VersionStore` protocol, which
 :class:`ProcedureVersionStore` implements here.
 
 One store instance is bound to one playbook file. The pipeline is deliberately
@@ -27,7 +27,7 @@ from sqlalchemy import select, text as sa_text
 
 from app.core.database import async_session_factory
 from app.models.policies.procedure_version import ProcedureVersion
-from ragit.ingestion import IngestionSnapshot, VersionRecord
+from ragnor.ingestion import IngestionSnapshot, VersionRecord
 
 logger = logging.getLogger(__name__)
 
