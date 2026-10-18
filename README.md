@@ -143,7 +143,7 @@ OmniCare Financial includes automated tests with Pytest covering authentication,
 
 ```bash
 # Backend tests (from the repository root; the backend
-# resolves ragit from the pinned Ragnor package dependency)
+# resolves the shared Ragnor library from the pinned PyPI dependency)
 cd backend
 uv pip install -e .
 python -m pytest tests/ -v
