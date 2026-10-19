@@ -1,77 +1,126 @@
-name: Full Suite CI
+name: Central CI
 
 on:
   push:
     branches: [main]
   pull_request:
+  merge_group:
+  schedule:
+    - cron: '17 4 * * 1'
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: full-ci-${{ github.ref }}
-  cancel-in-progress: true
+  group: insurance-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
-  backend:
-    name: Backend complete pytest suite
-    runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: pgvector/pgvector:pg16
-        env:
-          POSTGRES_USER: omnicare
-          POSTGRES_PASSWORD: omnicare_password
-          POSTGRES_DB: omnicare_test
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U omnicare"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
-    env:
-      OMNICARE_TEST_DATABASE_URL: postgresql+asyncpg://omnicare:omnicare_password@127.0.0.1:5432/omnicare_test
-      DATABASE_URL: postgresql+asyncpg://omnicare:omnicare_password@127.0.0.1:5432/omnicare_test
-      JWT_SECRET_KEY: ci-only-not-a-real-secret-32chars-min
-      ENVIRONMENT: test
-      OPENAI_API_KEY: ""
-      OMNICARE_EVAL_LIVE: ""
-      OMNICARE_EVAL_PERSIST: "0"
-    defaults:
-      run:
-        working-directory: backend
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-          cache: pip
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -e .
-      - name: Apply migrations
-        run: alembic upgrade head
-      - name: Run complete backend suite
-        run: pytest tests/ -q -p no:randomly
+  python:
+    name: Backend Python quality
+    uses: eslam-aboutaleb/ci-workflows/.github/workflows/python.yml@227a096a48326e07e5bcf128cfeafb9251706e78
+    with:
+      project-dir: backend
+      manager: pip
+      python-versions: '["3.12"]'
+      operating-systems: '["ubuntu-latest"]'
+      test-path: ci_smoke
+      ruff-version: '0.6.9'
+      build-distribution: false
 
-  frontend:
-    name: Frontend lint, types, tests and build
+  integration:
+    name: Backend PostgreSQL and Redis integration
+    uses: eslam-aboutaleb/ci-workflows/.github/workflows/integration.yml@227a096a48326e07e5bcf128cfeafb9251706e78
+    with:
+      project-dir: backend
+      postgres-image: pgvector/pgvector:pg16
+      redis-image: redis:7-alpine
+
+  node:
+    name: Frontend Node quality
+    uses: eslam-aboutaleb/ci-workflows/.github/workflows/node.yml@227a096a48326e07e5bcf128cfeafb9251706e78
+    with:
+      project-dir: frontend
+      manager: npm
+      node-versions: '["22"]'
+      operating-systems: '["ubuntu-latest"]'
+      test-shards: 1
+      audit-level: high
+
+  browser:
+    name: Frontend Playwright
+    uses: eslam-aboutaleb/ci-workflows/.github/workflows/browser.yml@227a096a48326e07e5bcf128cfeafb9251706e78
+    with:
+      project-dir: frontend
+      manager: npm
+      node-version: '22'
+      test-script: e2e:ci
+      browsers: chromium
+      shards: 1
+
+  docker:
+    name: Build all Dockerfiles
+    strategy:
+      fail-fast: false
+      matrix:
+        image:
+          - dockerfile: backend/Dockerfile
+            context: .
+          - dockerfile: backend/Dockerfile.dev
+            context: .
+          - dockerfile: frontend/Dockerfile
+            context: frontend
+          - dockerfile: frontend/Dockerfile.dev
+            context: frontend
+    uses: eslam-aboutaleb/ci-workflows/.github/workflows/docker.yml@227a096a48326e07e5bcf128cfeafb9251706e78
+    with:
+      dockerfile: ${{ matrix.image.dockerfile }}
+      build-context: ${{ matrix.image.context }}
+      platforms: linux/amd64
+
+  security:
+    name: Central security analysis
+    uses: eslam-aboutaleb/ci-workflows/.github/workflows/security.yml@227a096a48326e07e5bcf128cfeafb9251706e78
+    permissions:
+      contents: read
+      actions: read
+      security-events: write
+      pull-requests: read
+    with:
+      languages: '["python", "javascript-typescript", "actions"]'
+      dependency-severity: high
+
+  workflow-validation:
+    name: Central workflow syntax validation
+    uses: eslam-aboutaleb/ci-workflows/.github/workflows/workflow-lint.yml@227a096a48326e07e5bcf128cfeafb9251706e78
+
+  ci-success:
+    name: CI Status Check
+    if: always()
+    needs: [python, integration, node, browser, docker, security, workflow-validation]
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: frontend
+    timeout-minutes: 5
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
-      - run: npm ci
-      - run: npm run lint
-      - run: npm run typecheck
-      - run: npm test
-      - run: npm run build
+      - name: Require every qualification workflow to pass
+        env:
+          JOB_RESULTS: ${{ toJSON(needs) }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+
+          jobs = json.loads(os.environ["JOB_RESULTS"])
+          failures = {
+              name: result["result"]
+              for name, result in jobs.items()
+              if result["result"] != "success"
+          }
+          if failures:
+              for name, result in failures.items():
+                  print(f"{name}: {result}")
+              raise SystemExit("One or more required CI workflows did not pass.")
+          print("Every required CI workflow passed.")
+          PY

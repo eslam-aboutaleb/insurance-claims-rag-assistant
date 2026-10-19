@@ -1,27 +1,27 @@
-"""OmniCare embedding and vector-store wiring over ragit.
+"""OmniCare embedding and vector-store wiring over ragnor.
 
 The embedding provider registry and the vector-store ABCs
-are domain-agnostic (ragit); this module is the OmniCare
+are domain-agnostic (ragnor); this module is the OmniCare
 wiring: it selects the provider from the application
 settings and injects the app's session factory, embedding
 function, and embedding dimension — the dependencies
-ragit, being domain-agnostic, cannot import itself.
+ragnor, being domain-agnostic, cannot import itself.
 """
 
 from __future__ import annotations
 
 from app.core.config import get_settings
 from app.core.database import async_session_factory
-from ragit.embeddings import (
+from ragnor.embeddings import (
     EmbeddingFunction,
     LitellmEmbeddingFunction,
     get_embedding_dimension,
     register_dimension,
 )
-from ragit.embeddings.registry import (
+from ragnor.embeddings.registry import (
     get_embedding_function as _get_embedding_function,
 )
-from ragit.stores import VectorStore, get_vector_store as _ragit_get_vector_store
+from ragnor.stores import VectorStore, get_vector_store as _ragnor_get_vector_store
 
 __all__ = [
     "EmbeddingFactory",
@@ -46,7 +46,7 @@ class EmbeddingFactory:
     def get_embedding_function(cls) -> EmbeddingFunction:
         """Create and return an embedding function.
 
-        Delegates to the ragit embedding registry, which selects the
+        Delegates to the ragnor embedding registry, which selects the
         provider from ``settings.embedding_provider`` (defaulting to
         the LiteLLM provider) and configures it with the API key and
         model name from the application settings.
@@ -75,7 +75,7 @@ def get_vector_store(
         Configured VectorStore instance based on provider setting.
     """
     settings = get_settings()
-    return _ragit_get_vector_store(
+    return _ragnor_get_vector_store(
         table_name=table_name,
         id_field=id_field,
         embedding_dim=(embedding_dim if embedding_dim is not None else get_embedding_dimension()),

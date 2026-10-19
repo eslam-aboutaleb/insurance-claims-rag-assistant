@@ -55,8 +55,8 @@ from app.domain.evaluation import (
     states_coverage_claim,
 )
 from app.domain.evaluation_cli import format_summary
-from ragit.evaluation.dataset import EvalSample
-from ragit.evaluation.runner import EvalResult
+from ragnor.evaluation.dataset import EvalSample
+from ragnor.evaluation.runner import EvalResult
 
 EMBEDDING_DIM = 1536
 
@@ -193,8 +193,7 @@ async def grounded_answer_fn(query: str, context: str) -> str:
     ]
     if not supporting:
         return (
-            "I don't have that information in my policy documents. "
-            "Please contact our support team."
+            "I don't have that information in my policy documents. Please contact our support team."
         )
     return " ".join(" ".join(supporting).split())
 
@@ -260,16 +259,16 @@ async def eval_corpus() -> int:
     # Pin the golden evaluation corpus independently of deployment overrides.
     corpus = Path(__file__).resolve().parents[1] / "app" / "data" / "sample_policy.md"
     assert corpus.is_file(), f"RAG evaluation corpus missing: {corpus}"
-    assert corpus.read_text(encoding="utf-8").strip(), (
-        f"RAG evaluation corpus is empty: {corpus}"
-    )
+    assert corpus.read_text(encoding="utf-8").strip(), f"RAG evaluation corpus is empty: {corpus}"
     ingested = await ingest_policy(str(corpus))
     assert ingested > 0, f"RAG evaluation ingested zero policy chunks from {corpus}"
 
     async with async_session_factory() as session:
         indexed = (await session.execute(text("SELECT COUNT(*) FROM policy_chunks"))).scalar_one()
         documents = (
-            await session.execute(text("SELECT COUNT(DISTINCT policy_version_id) FROM policy_chunks"))
+            await session.execute(
+                text("SELECT COUNT(DISTINCT policy_version_id) FROM policy_chunks")
+            )
         ).scalar_one()
     assert documents > 0 and indexed > 0, (
         "RAG evaluation preflight failed: no policy documents or chunks indexed "

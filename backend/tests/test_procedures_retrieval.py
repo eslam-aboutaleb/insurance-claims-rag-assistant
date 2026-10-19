@@ -132,7 +132,7 @@ async def _stored_chunker_version() -> str | None:
 
 async def _chunker_reported_version() -> str:
     """Return the version the section-aware chunker reports for itself."""
-    from ragit.chunking import MarkdownSectionChunker, SlidingWindowChunker  # noqa: PLC0415
+    from ragnor.chunking import MarkdownSectionChunker, SlidingWindowChunker  # noqa: PLC0415
 
     return MarkdownSectionChunker(SlidingWindowChunker()).version
 

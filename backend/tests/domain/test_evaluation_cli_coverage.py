@@ -42,8 +42,8 @@ from app.domain.evaluation_cli import (
     parse_category,
     select_dataset,
 )
-from ragit.evaluation.dataset import Difficulty, EvalSample
-from ragit.evaluation.runner import EvalConfig, EvalResult
+from ragnor.evaluation.dataset import Difficulty, EvalSample
+from ragnor.evaluation.runner import EvalConfig, EvalResult
 
 _ANSWERABLE_QUERY = "Is water damage from a pipe burst covered?"
 _REFUSAL_QUERY = "What is the weather forecast for Cairo tomorrow?"

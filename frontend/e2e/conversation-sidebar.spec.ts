@@ -1,65 +1,18 @@
 import { test, expect } from "@playwright/test";
+import {
+  APP_URL,
+  FIRST_CONVERSATION_MESSAGE,
+  SECOND_CONVERSATION_MESSAGE,
+  findByTitle,
+  seedUserWithTwoConversations,
+  signIn,
+} from "./helpers";
 
-const API_URL = "http://localhost:8000";
-const APP_URL = "http://localhost:3000";
-const PASSWORD = "TestPass123!";
-
-type Conversation = { id: string; title: string };
-
-/**
- * Creates a user with two conversations by driving the real chat API, so the
- * browser assertions below run against genuine backend data.
- */
-async function seedUserWithTwoConversations(request: any) {
-  const username = `sidebar_e2e_${Date.now()}${Math.floor(Math.random() * 1e6)}@example.com`;
-
-  const signup = await request.post(`${API_URL}/api/v1/auth/signup`, {
-    data: { username, password: PASSWORD },
-  });
-  expect(signup.status()).toBe(201);
-  const token = (await signup.json()).access_token;
-  const headers = { Authorization: `Bearer ${token}` };
-
-  const send = async (message: string) => {
-    const response = await request.post(`${API_URL}/api/v1/chat/stream`, {
-      data: { message },
-      headers,
-    });
-    expect(response.status()).toBe(200);
-  };
-
-  await send("First archived conversation about water damage");
-  await request.post(`${API_URL}/api/v1/chat/reset`, { headers });
-  await send("Second archived conversation about filing a claim");
-
-  // Persistence happens after the stream closes.
-  await expect
-    .poll(
-      async () => {
-        const list = await request.get(`${API_URL}/api/v1/chat/conversations`, {
-          headers,
-        });
-        return ((await list.json()).conversations as Conversation[]).length;
-      },
-      { timeout: 30_000 },
-    )
-    .toBe(2);
-
-  const list = await request.get(`${API_URL}/api/v1/chat/conversations`, {
-    headers,
-  });
-  const conversations = (await list.json()).conversations as Conversation[];
-
-  return { username, conversations };
-}
-
-async function signIn(page: any, username: string) {
-  await page.goto(`${APP_URL}/login`);
-  await page.getByPlaceholder("Enter your email").fill(username);
-  await page.getByPlaceholder("Enter your password").fill(PASSWORD);
-  await page.getByRole("button", { name: "Sign in" }).click();
-  await page.waitForURL("**/chat**", { timeout: 30_000 });
-}
+// The transcript and the sidebar row render the same title, so the assertions
+// that are about what the chat window showed are scoped to it rather than to the
+// whole page. The shared helper seeds deterministic database fixtures and
+// addresses conversations by title, the same way the other specs do.
+test.describe.configure({ timeout: 90_000 });
 
 test("old conversations stay listed in the sidebar and open at /chat/:id", async ({
   page,
@@ -67,41 +20,42 @@ test("old conversations stay listed in the sidebar and open at /chat/:id", async
 }) => {
   const { username, conversations } =
     await seedUserWithTwoConversations(request);
-  const [newest, oldest] = conversations;
+  const first = findByTitle(conversations, FIRST_CONVERSATION_MESSAGE);
+  const second = findByTitle(conversations, SECOND_CONVERSATION_MESSAGE);
 
   await signIn(page, username);
 
   const history = page.getByTestId("chat-history");
   await expect(history.getByRole("button")).toHaveCount(2);
   await expect(history).not.toContainText("No conversations yet");
-  await expect(history).toContainText(newest.title);
-  await expect(history).toContainText(oldest.title);
+  await expect(history).toContainText(first.title);
+  await expect(history).toContainText(second.title);
 
-  await history.getByText(oldest.title).click();
+  await history.getByText(first.title).click();
 
-  await expect(page).toHaveURL(`${APP_URL}/chat/${oldest.id}`);
+  await expect(page).toHaveURL(`${APP_URL}/chat/${first.id}`);
   await expect(
     page.getByText("This is an archived chat", { exact: false }),
   ).toBeVisible();
   await expect(
-    page.getByText("First archived conversation about water damage"),
+    page.getByTestId("message-list").getByText(first.title),
   ).toBeVisible();
 
   // A full page load on the deep link must still resolve the conversation.
   await page.reload();
-  await expect(page).toHaveURL(`${APP_URL}/chat/${oldest.id}`);
+  await expect(page).toHaveURL(`${APP_URL}/chat/${first.id}`);
   await expect(
-    page.getByText("First archived conversation about water damage"),
+    page.getByTestId("message-list").getByText(first.title),
   ).toBeVisible();
 
   // Both conversations remain reachable, and the other one loads its own history.
-  await page.getByTestId("chat-history").getByText(newest.title).click();
-  await expect(page).toHaveURL(`${APP_URL}/chat/${newest.id}`);
+  await page.getByTestId("chat-history").getByText(second.title).click();
+  await expect(page).toHaveURL(`${APP_URL}/chat/${second.id}`);
   await expect(
-    page.getByText("Second archived conversation about filing a claim"),
+    page.getByTestId("message-list").getByText(second.title),
   ).toBeVisible();
   await expect(
-    page.getByText("First archived conversation about water damage"),
+    page.getByTestId("message-list").getByText(first.title),
   ).toHaveCount(0);
 });
 
@@ -111,18 +65,21 @@ test("New Chat clears the view but keeps old conversations in the sidebar", asyn
 }) => {
   const { username, conversations } =
     await seedUserWithTwoConversations(request);
+  const first = findByTitle(conversations, FIRST_CONVERSATION_MESSAGE);
+  const second = findByTitle(conversations, SECOND_CONVERSATION_MESSAGE);
 
   await signIn(page, username);
 
   const history = page.getByTestId("chat-history");
   await expect(history.getByRole("button")).toHaveCount(2);
 
-  await history.getByText(conversations[0].title).click();
-  await expect(page).toHaveURL(`${APP_URL}/chat/${conversations[0].id}`);
+  await history.getByText(first.title).click();
+  await expect(page).toHaveURL(`${APP_URL}/chat/${first.id}`);
 
   await page.getByTestId("new-chat-button").click();
 
   await expect(page).toHaveURL(`${APP_URL}/chat`);
   await expect(history.getByRole("button")).toHaveCount(2);
-  await expect(history).toContainText(conversations[1].title);
+  await expect(history).toContainText(first.title);
+  await expect(history).toContainText(second.title);
 });

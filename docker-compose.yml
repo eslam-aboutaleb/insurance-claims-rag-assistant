@@ -146,7 +146,7 @@ services:
   # SKIP LOCKED, so additional replicas scale without coordination.
   embedding-drain:
     build:
-      # Same root context as the backend: the drainer imports ragit.
+      # Same root context as the backend: the drainer imports ragnor.
       context: .
       dockerfile: backend/Dockerfile
     container_name: omnicare-embedding-drain
@@ -175,7 +175,7 @@ services:
   # and the feed's unique key on job_id keeps a redelivery from notifying twice.
   notification-drain:
     build:
-      # Same root context as the backend: the drainer imports ragit.
+      # Same root context as the backend: the drainer imports ragnor.
       context: .
       dockerfile: backend/Dockerfile
     container_name: omnicare-notification-drain

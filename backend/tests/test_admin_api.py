@@ -483,7 +483,9 @@ def test_a_failed_audit_write_does_not_break_the_transition(test_client: TestCli
     claim_id = f"CLM-{uuid.uuid4().hex[:8].upper()}"
     _seed([_claim_row(holder["user_id"], claim_id)])
 
-    with patch("app.audit.service.AuditEvent", MagicMock(side_effect=RuntimeError("trail offline"))):
+    with patch(
+        "app.audit.service.AuditEvent", MagicMock(side_effect=RuntimeError("trail offline"))
+    ):
         response = test_client.post(
             f"/api/v1/claims/{claim_id}/status",
             json={"status": "Withdrawn"},

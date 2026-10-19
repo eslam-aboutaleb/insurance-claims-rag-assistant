@@ -4,9 +4,8 @@
 # ==============================================================================
 # Build context: the REPOSITORY ROOT (see docker-compose.dev.yml),
 # not ./backend. The generic RAG machinery comes from the
-# published ``ragit`` package, pinned as a git dependency
-# in backend/pyproject.toml; uv clones it from GitHub
-# during the backend install (git is installed below).
+# published ``ragnor`` package, pinned to version 0.4.1
+# with the pgvector extra in backend/pyproject.toml.
 #
 # Differences from production Dockerfile:
 #   - Creates a virtual environment at /opt/venv for editable installs.
@@ -24,12 +23,10 @@ FROM python:3.11-slim
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1
 
-# Install system dependencies required for building Python packages
-# (git is required by uv to clone the pinned ragit git dependency).
+# Install system dependencies required for building Python packages.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     curl \
-    git \
     && rm -rf /var/lib/apt/lists/*
 
 # Install UV package manager (pinned version). Development uses
@@ -42,8 +39,8 @@ ENV PATH="/root/.local/bin:$PATH"
 WORKDIR /app
 
 # Create the virtual environment and install the backend
-# package in editable mode. The pinned ragit git dependency
-# is cloned from GitHub as part of this install.
+# package in editable mode. The pinned ragnor distribution
+# is resolved from PyPI as part of this install.
 RUN uv venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 

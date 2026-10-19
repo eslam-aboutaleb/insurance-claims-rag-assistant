@@ -1,4 +1,4 @@
-"""Procedure playbook ingestion over the ragit pipeline.
+"""Procedure playbook ingestion over the ragnor pipeline.
 
 "Skills" here means domain procedure playbooks retrieved as documents through a
 second index — not Claude-style on-disk skill bundles (ADK 1.3 has no native
@@ -9,7 +9,7 @@ system prompt is already dense and every added rule costs tokens on every turn:
 with the playbooks in the procedures index, a compliance update is an edit to a
 markdown file with no deploy and no prompt change.
 
-Ingestion reuses ragit's :class:`ragit.ingestion.IngestionPipeline` unchanged.
+Ingestion reuses ragnor's :class:`ragnor.ingestion.IngestionPipeline` unchanged.
 One pipeline instance is shared across the playbooks in the directory and run
 once per file, each run bound to a
 :class:`~app.domain.procedures.store.ProcedureVersionStore` for that one file,
@@ -35,8 +35,8 @@ from sqlalchemy import text as sa_text
 from app.core.config import get_settings
 from app.core.database import async_session_factory
 from app.domain.procedures.store import ProcedureVersionStore
-from ragit.chunking import MarkdownSectionChunker, SlidingWindowChunker
-from ragit.ingestion import FileDocumentSource, IngestionPipeline
+from ragnor.chunking import MarkdownSectionChunker, SlidingWindowChunker
+from ragnor.ingestion import FileDocumentSource, IngestionPipeline
 
 logger = logging.getLogger(__name__)
 
@@ -101,8 +101,8 @@ def _build_pipeline() -> IngestionPipeline:
 async def ingest_procedures(procedures_dir: str | None = None) -> int:
     """Ingest the procedure playbook corpus into the vector store.
 
-    Delegates each playbook to the ragit
-    :class:`~ragit.ingestion.IngestionPipeline`: it loads the file, hashes its
+    Delegates each playbook to the ragnor
+    :class:`~ragnor.ingestion.IngestionPipeline`: it loads the file, hashes its
     content, compares the ingestion snapshot against the active version for
     that file, and — only when the source changed — retires the old version,
     deletes its chunks, chunks and embeds the new content, and upserts the
@@ -116,7 +116,7 @@ async def ingest_procedures(procedures_dir: str | None = None) -> int:
     Returns:
         The number of chunks the procedures index holds for this corpus after
         the run, or ``0`` when the run was skipped. The count is read from the
-        index rather than summed per playbook, because ragit's skip path
+        index rather than summed per playbook, because ragnor's skip path
         reports the store-wide chunk count for an unchanged source: summing
         that would inflate the number on every warm boot.
     """
