@@ -3,7 +3,7 @@
  *
  * Stack requirement: every spec in this directory needs the full stack up --
  * frontend on http://localhost:3000 and backend on http://localhost:8000 --
- * because they seed real conversations through the chat API and sign in
+ * because they seed conversations through the backend database and sign in
  * through the login form. `playwright.config.ts` runs
  * `docker compose up --build frontend` and reuses whatever is already
  * listening on :3000, so a rebuild is required whenever the bundle under test
