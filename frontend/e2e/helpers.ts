@@ -35,6 +35,55 @@ export const FIRST_CONVERSATION_MESSAGE =
 export const SECOND_CONVERSATION_MESSAGE =
   "Second archived conversation about filing a claim";
 
+/**
+ * Seeds archived conversations through the application's SQLAlchemy models.
+ * UI regression tests should not call the live model service: a stream can
+ * return HTTP 200 while reporting an agent failure, which leaves no history
+ * to assert against and makes CI depend on external AI credentials.
+ */
+const TWO_CONVERSATION_SEED_SCRIPT = `
+import asyncio
+import os
+import uuid
+
+from app.core.database import async_session_factory
+from app.models.conversations import Conversation, ConversationMessage
+
+
+async def main() -> None:
+    user_id = uuid.UUID(os.environ["SEED_USER_ID"])
+    seed_id = os.environ["SEED_ID"]
+    titles = [os.environ["SEED_FIRST_TITLE"], os.environ["SEED_SECOND_TITLE"]]
+    async with async_session_factory() as session:
+        ids = []
+        for index, title in enumerate(titles):
+            conversation = Conversation(
+                user_id=user_id,
+                session_id=f"e2e-{seed_id}-{index}",
+                title=title,
+            )
+            session.add(conversation)
+            await session.flush()
+            session.add_all([
+                ConversationMessage(
+                    conversation_id=conversation.id,
+                    role="user",
+                    content=title,
+                ),
+                ConversationMessage(
+                    conversation_id=conversation.id,
+                    role="assistant",
+                    content="This is a seeded response for browser regression tests.",
+                ),
+            ])
+            ids.append(str(conversation.id))
+        await session.commit()
+        print("\\n".join(ids))
+
+
+asyncio.run(main())
+`;
+
 /** Looks a seeded conversation up by the message it was created from. */
 export function findByTitle(
   conversations: Conversation[],
@@ -95,43 +144,36 @@ export async function listConversations(
 }
 
 /**
- * Creates a user with two conversations by driving the real chat API, so the
- * browser assertions run against genuine backend data.
- *
- * Each response body is read to completion: a turn is persisted only once its
- * stream closes, and resolving on the response headers alone leaves the second
- * stream overlapping the first, which makes the order the list comes back in
- * (``updated_at`` descending) a coin toss. The caller addresses conversations
- * by title rather than by position for the same reason.
+ * Creates an account through the API and deterministic archived conversations
+ * through the backend's own models. The caller addresses them by title rather
+ * than position because the sidebar sorts by update time.
  */
 export async function seedUserWithTwoConversations(
   request: APIRequestContext,
 ): Promise<SeededUser> {
-  const { username, token } = await signUpViaApi(request);
-  const headers = authHeaders(token);
+  const { username, token, userId } = await signUpViaApi(request);
+  const docker = dockerBinary();
+  if (!docker) {
+    throw new Error("Docker is required to seed browser test conversations.");
+  }
 
-  const send = async (message: string) => {
-    const response = await request.post(`${API_URL}/api/v1/chat/stream`, {
-      data: { message },
-      headers,
-    });
-    expect(response.status()).toBe(200);
-    // Reading the body to the end is what guarantees the turn was persisted
-    // before the next one starts.
-    await response.text();
-  };
+  const seedId = `${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
+  execFileSync(
+    docker,
+    [
+      "exec", "-i",
+      "-e", `SEED_USER_ID=${userId}`,
+      "-e", `SEED_ID=${seedId}`,
+      "-e", `SEED_FIRST_TITLE=${FIRST_CONVERSATION_MESSAGE}`,
+      "-e", `SEED_SECOND_TITLE=${SECOND_CONVERSATION_MESSAGE}`,
+      BACKEND_CONTAINER, "python3", "-",
+    ],
+    { input: TWO_CONVERSATION_SEED_SCRIPT, encoding: "utf8", timeout: 60_000 },
+  );
 
-  await send(FIRST_CONVERSATION_MESSAGE);
-  await request.post(`${API_URL}/api/v1/chat/reset`, { headers });
-  await send(SECOND_CONVERSATION_MESSAGE);
-
-  await expect
-    .poll(async () => (await listConversations(request, token)).length, {
-      timeout: 30_000,
-    })
-    .toBe(2);
-
-  return { username, token, conversations: await listConversations(request, token) };
+  const conversations = await listConversations(request, token);
+  expect(conversations).toHaveLength(2);
+  return { username, token, conversations };
 }
 
 /**
