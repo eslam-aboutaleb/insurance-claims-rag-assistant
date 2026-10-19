@@ -211,8 +211,8 @@ import uuid
 
 from sqlalchemy import select
 
-from app.database import async_session_factory
-from app.models.conversation import Conversation
+from app.core.database import async_session_factory
+from app.models.conversations import Conversation
 
 
 async def main() -> None:
