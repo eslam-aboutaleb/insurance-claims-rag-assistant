@@ -1,0 +1,13 @@
+name: Pull request description contract
+
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize, ready_for_review]
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  description-contract:
+    uses: eslam-aboutaleb/ci-workflows/.github/workflows/pr-description.yml@68615e1c52d02f621ea67dec67386179eeeac35e
