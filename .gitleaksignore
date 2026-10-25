@@ -1,0 +1,17 @@
+# Verified synthetic test fixtures in existing history; exact findings only.
+# backend/tests/test_distributed_state.py:479 (synthetic test literal)
+589a94b5f7133e0a7d2affb7693e8543b6fd4096:backend/tests/test_distributed_state.py:generic-api-key:479
+# backend/tests/test_distributed_state.py:484 (synthetic test literal)
+589a94b5f7133e0a7d2affb7693e8543b6fd4096:backend/tests/test_distributed_state.py:generic-api-key:484
+# frontend/tests/components/MessageBubble.test.tsx:50 (synthetic test literal)
+589a94b5f7133e0a7d2affb7693e8543b6fd4096:frontend/tests/components/MessageBubble.test.tsx:generic-api-key:50
+# frontend/tests/components/ClaimConfirmCard.test.tsx:32 (synthetic test literal)
+589a94b5f7133e0a7d2affb7693e8543b6fd4096:frontend/tests/components/ClaimConfirmCard.test.tsx:generic-api-key:32
+# frontend/tests/hooks/useChatMessages.test.ts:361 (synthetic test literal)
+589a94b5f7133e0a7d2affb7693e8543b6fd4096:frontend/tests/hooks/useChatMessages.test.ts:generic-api-key:361
+# backend/tests/test_auth_module_coverage.py:18 (synthetic test literal)
+b6aa0b1779026c2b459be2668befaf6962de8bb7:backend/tests/test_auth_module_coverage.py:generic-api-key:18
+# backend/tests/test_idempotency.py:181 (synthetic test literal)
+a2b566a8de85e91ea98a98d8d67e186f80d85374:backend/tests/test_idempotency.py:generic-api-key:181
+# backend/tests/test_coverage.py:612 (synthetic test literal)
+ae32a6e6d0230b65ef6acd5330923ef80cfa0fd7:backend/tests/test_coverage.py:generic-api-key:612

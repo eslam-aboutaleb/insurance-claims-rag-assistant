@@ -134,3 +134,20 @@ docker-compose exec backend pytest tests/ -v
 
 ---
 
+
+## GitHub Actions secrets and shared CI
+
+Repository Actions secrets contain `DATABASE_URL`, `DATABASE_PASSWORD`, and
+`JWT_SECRET_KEY`, copied from the existing local environment. The database URL
+currently points to localhost and is not a hosted database endpoint. These values
+are stored for explicitly authorized application workflows; the test and RAG
+evaluation jobs continue using disposable PostgreSQL and do not receive them.
+Never point the destructive test suite at the application database.
+
+Frontend quality, workflow validation, commit validation, and secret scanning use
+`eslam-aboutaleb/ci-workflows` pinned to a reviewed commit. Secret scanning runs
+on every push, pull request, merge queue event, daily schedule, and manual run.
+It scans fetched Git history for database credentials and built-in token patterns,
+and redacts findings. `.gitleaksignore` contains only exact historical synthetic
+test-fixture fingerprints; new occurrences remain subject to scanning. Any actual
+exposed credential must be rotated with its provider as well as updated in GitHub.

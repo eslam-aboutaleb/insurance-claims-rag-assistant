@@ -59,19 +59,17 @@ jobs:
 
   frontend:
     name: Frontend lint, types, tests and build
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: frontend
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
-      - run: npm ci
-      - run: npm run lint
-      - run: npm run typecheck
-      - run: npm test
-      - run: npm run build
+    uses: eslam-aboutaleb/ci-workflows/.github/workflows/node.yml@3a56d71dd421adc7a004747bf67bba1969f05b2f
+    with:
+      project-dir: frontend
+      manager: npm
+      node-versions: '["20"]'
+
+  workflow-lint:
+    uses: eslam-aboutaleb/ci-workflows/.github/workflows/workflow-lint.yml@3a56d71dd421adc7a004747bf67bba1969f05b2f
+
+  commit-messages:
+    permissions:
+      contents: read
+      pull-requests: read
+    uses: eslam-aboutaleb/ci-workflows/.github/workflows/commit-messages.yml@3a56d71dd421adc7a004747bf67bba1969f05b2f
