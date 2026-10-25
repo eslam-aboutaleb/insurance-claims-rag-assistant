@@ -267,9 +267,12 @@ class ClaimJobProcessor:
         from sqlalchemy import select  # noqa: PLC0415
 
         from app.core.config import get_settings  # noqa: PLC0415
-        from app.domain.embeddings import EmbeddingFactory, get_vector_store  # noqa: PLC0415
+        from app.domain.embeddings import (  # noqa: PLC0415
+            EmbeddingFactory,
+            get_embedding_dimension,
+            get_vector_store,
+        )
         from app.models.claims.claim import Claim  # noqa: PLC0415
-        from ragit.embeddings import get_embedding_dimension  # noqa: PLC0415
         from ragit.validation import validate_embedding  # noqa: PLC0415
 
         payload = job.payload

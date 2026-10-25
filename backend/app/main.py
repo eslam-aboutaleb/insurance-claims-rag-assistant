@@ -25,7 +25,7 @@ from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 
-from app.agent.agent import configure_llm, warm_session_service
+from app.agent.agent import warm_session_service
 from app.api.v1.router import router as v1_router
 from app.core.config import get_settings
 from app.core.idempotency import configure_idempotency_storage
@@ -173,13 +173,6 @@ async def lifespan(app: FastAPI):
     )
 
     await _run_alembic_migrations()
-
-    # Configure LiteLLM environment variables from centralized settings
-    try:
-        configure_llm()
-        logger.info("LiteLLM configuration applied")
-    except Exception as e:
-        logger.warning(f"LiteLLM configuration skipped: {e}")
 
     if settings.observability_enabled:
         _install_observability_hooks()

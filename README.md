@@ -43,10 +43,13 @@ Start with the quick start below. The full engineering reference is split into f
     cp .env.example .env
     ```
 
-    Edit `.env` and add your OpenAI API key:
+    Edit `.env` with your gateway URL, virtual token, and LiteLLM model aliases:
 
     ```ini
-    OPENAI_API_KEY=sk-your-openai-api-key-here
+    LITELLM_API_KEY=your-virtual-token
+    LITELLM_API_BASE=https://your-gateway/v1
+    LITELLM_MODEL=openai/agent-tools
+    LITELLM_EMBEDDING_MODEL=openai/rag-embedding
     POSTGRES_PASSWORD=your-secure-password
     ```
 

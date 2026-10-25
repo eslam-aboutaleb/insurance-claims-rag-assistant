@@ -286,10 +286,10 @@ Configure these settings in `.env` (or pass via container environment):
 
 | Variable                 | Default Value                 | Required | Purpose & Description                                                                               |
 | :----------------------- | :---------------------------- | :------: | :-------------------------------------------------------------------------------------------------- |
-| `OPENAI_API_KEY`         | _(None)_                      | **Yes**  | OpenAI API secret key required when using OpenAI models.                                            |
-| `OPENAI_API_BASE`        | `""`                          |    No    | Optional OpenAI API base URL override for LiteLLM routing.                                          |
-| `LLM_MODEL`              | `openai/gpt-4o-mini`          |    No    | Model descriptor for LiteLLM router (e.g. `openai/gpt-4o`, `anthropic/claude-3-5-sonnet-20241022`). |
-| `EMBEDDING_MODEL`        | `text-embedding-3-small`      |    No    | Embedding model name used by LiteLLM for pgvector embeddings.                                                       |
+| `LITELLM_API_KEY`         | `""`                          | No  | Provider API key or gateway virtual token passed to LiteLLM.                                            |
+| `LITELLM_API_BASE`        | `""`                          |    No    | Optional provider or gateway base URL passed to LiteLLM.                                          |
+| `LITELLM_MODEL`              | `openai/gpt-4o-mini`          |    No    | Model descriptor for LiteLLM router (e.g. `openai/gpt-4o`, `anthropic/claude-3-5-sonnet-20241022`). |
+| `LITELLM_EMBEDDING_MODEL`        | `text-embedding-3-small`      |    No    | Embedding model name used by LiteLLM for pgvector embeddings.                                                       |
 | `DATABASE_URL`           | _(None)_                      | **Yes**  | SQLAlchemy async PostgreSQL connection string.                                                       |
 | `POSTGRES_USER`          | `omnicare`                    |    No    | PostgreSQL username for the database service.                                                       |
 | `POSTGRES_PASSWORD`      | _(None)_                      | **Yes**  | PostgreSQL password for the database service. Must be set for the container to start.               |
