@@ -59,17 +59,17 @@ jobs:
 
   frontend:
     name: Frontend lint, types, tests and build
-    uses: eslam-aboutaleb/ci-workflows/.github/workflows/node.yml@ea8caed4e4003f65d7301b4918c01cfad703aa53
+    uses: eslam-aboutaleb/ci-workflows/.github/workflows/node.yml@ac6ec2411f940fec2f929fe103ce9f675ce81fd9
     with:
       project-dir: frontend
       manager: npm
       node-versions: '["20"]'
 
   workflow-lint:
-    uses: eslam-aboutaleb/ci-workflows/.github/workflows/workflow-lint.yml@ea8caed4e4003f65d7301b4918c01cfad703aa53
+    uses: eslam-aboutaleb/ci-workflows/.github/workflows/workflow-lint.yml@ac6ec2411f940fec2f929fe103ce9f675ce81fd9
 
   commit-messages:
     permissions:
       contents: read
       pull-requests: read
-    uses: eslam-aboutaleb/ci-workflows/.github/workflows/commit-messages.yml@ea8caed4e4003f65d7301b4918c01cfad703aa53
+    uses: eslam-aboutaleb/ci-workflows/.github/workflows/commit-messages.yml@ac6ec2411f940fec2f929fe103ce9f675ce81fd9
