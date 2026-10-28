@@ -77,7 +77,7 @@ jobs:
       - name: Install backend dependencies
         run: |
           python -m pip install --upgrade pip
-          # ragit is pinned as a git dependency in pyproject.toml, so the project
+          # ragnor is pinned to a PyPI release in pyproject.toml, so install the project
           # is installed rather than a requirements file.
           pip install -e .
           # Pinned to the same revision .pre-commit-config.yaml pins. An unpinned

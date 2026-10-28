@@ -1,9 +1,9 @@
-"""Procedure playbook retrieval adapter over ragit.
+"""Procedure playbook retrieval adapter over ragnor.
 
 The OmniCare procedure chunk binding — the ``procedure_chunks`` table, its
 ``text`` column, and the metadata columns returned in chunk metadata — lives
 here as :data:`PROCEDURE_RETRIEVER_SPEC`. The generic hybrid retrieval
-machinery is ragit's :class:`ragit.retrieval.HybridRetriever`.
+machinery is ragnor's :class:`ragnor.retrieval.HybridRetriever`.
 
 The procedures index is a *second* index alongside the policy one, not an
 extension of it: the pipeline, the chunk table, and the version table are all
@@ -17,9 +17,9 @@ import logging
 from typing import Any
 
 from app.core.config import get_settings
-from app.domain.rag_settings import RagitSettingsAdapter
+from app.domain.rag_settings import RagnorSettingsAdapter
 from app.core.database import async_session_factory
-from ragit.retrieval import HybridRetriever, RetrieverSpec, as_dicts
+from ragnor.retrieval import HybridRetriever, RetrieverSpec, as_dicts
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +35,7 @@ PROCEDURE_RETRIEVER_SPEC = RetrieverSpec(
 class ProcedureRetriever:
     """Hybrid retrieval over the OmniCare procedure chunk table.
 
-    Wraps ragit's :class:`ragit.retrieval.HybridRetriever` with the procedure
+    Wraps ragnor's :class:`ragnor.retrieval.HybridRetriever` with the procedure
     chunk binding. Any retrieval failure is logged and reported as an empty
     result set rather than raised.
 
@@ -50,7 +50,7 @@ class ProcedureRetriever:
         self._session_factory = session_factory or async_session_factory
         self._retriever = HybridRetriever(
             spec=PROCEDURE_RETRIEVER_SPEC,
-            settings=RagitSettingsAdapter(self._settings),
+            settings=RagnorSettingsAdapter(self._settings),
             session_factory=self._session_factory,
         )
 

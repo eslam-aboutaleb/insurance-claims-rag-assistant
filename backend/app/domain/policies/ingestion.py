@@ -1,11 +1,11 @@
-"""Policy ingestion adapter over ragit.
+"""Policy ingestion adapter over ragnor.
 
 The OmniCare policy version tables (``policies``,
 ``policy_versions``, ``policy_ingestion_meta``) are
-application-side storage: ragit's
-:class:`ragit.ingestion.IngestionPipeline` orchestrates
+application-side storage: ragnor's
+:class:`ragnor.ingestion.IngestionPipeline` orchestrates
 load/hash/compare/retire/chunk/embed/upsert and talks to a
-:class:`ragit.ingestion.VersionStore` protocol, which
+:class:`ragnor.ingestion.VersionStore` protocol, which
 :class:`PolicyVersionStore` implements here against the
 OmniCare tables. This module is the permanent home for the binding.
 
@@ -26,24 +26,24 @@ from typing import Any
 from sqlalchemy import select, text as sa_text
 
 from app.core.config import get_settings
-from app.domain.rag_settings import RagitSettingsAdapter
+from app.domain.rag_settings import RagnorSettingsAdapter
 from app.core.database import async_session_factory
 from app.domain.policies.retriever import POLICY_RETRIEVER_SPEC
 from app.models.policies.policy import Policy
 from app.models.policies.policy_version import PolicyVersion
-from ragit.chunking import (
+from ragnor.chunking import (
     MarkdownSectionChunker,
     SlidingWindowChunker,
     sliding_window_chunk,
 )
-from ragit.chunking.base import Chunker
-from ragit.ingestion import (
+from ragnor.chunking.base import Chunker
+from ragnor.ingestion import (
     FileDocumentSource,
     IngestionPipeline,
     IngestionSnapshot,
     VersionRecord,
 )
-from ragit.types import Chunk
+from ragnor.types import Chunk
 
 logger = logging.getLogger(__name__)
 
@@ -193,8 +193,8 @@ def chunk_policy_document(filepath: str) -> list[dict[str, Any]]:
     """Parse a Markdown policy file into structured, overlapping chunks.
 
     .. deprecated::
-        Use the ragit ingestion pipeline with a
-        :class:`ragit.chunking.MarkdownSectionChunker`
+        Use the ragnor ingestion pipeline with a
+        :class:`ragnor.chunking.MarkdownSectionChunker`
         instead. The pipeline owns ingestion now; this thin
         wrapper exists only for callers that want the chunk
         dicts from a file path on disk -- the unit tests that
@@ -237,7 +237,7 @@ def chunk_policy_document(filepath: str) -> list[dict[str, Any]]:
 async def ingest_policy(policy_path: str | None = None) -> int:
     """Ingest the policy document into the vector store.
 
-    Delegates to the ragit :class:`IngestionPipeline`:
+    Delegates to the ragnor :class:`IngestionPipeline`:
     loads the policy file, hashes its content, compares
     the ingestion snapshot against the active version,
     and -- when the source changed -- retires the old
@@ -283,7 +283,7 @@ async def ingest_policy(policy_path: str | None = None) -> int:
         embedder=EmbeddingFactory.get_embedding_function(),
         chunker=chunker,
         session_factory=async_session_factory,
-        settings=RagitSettingsAdapter(settings),
+        settings=RagnorSettingsAdapter(settings),
         version_id_key="policy_version_id",
         source_id_key="policy_id",
     )

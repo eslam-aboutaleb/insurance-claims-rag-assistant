@@ -91,7 +91,7 @@ def test_embedding_factory_routes_to_gateway():
     )
     with patch("app.domain.embeddings.get_settings", return_value=settings):
         embedding = EmbeddingFactory.get_embedding_function()
-    with patch("ragit.embeddings.litellm.litellm.embedding") as adapter:
+    with patch("ragnor.embeddings.litellm.litellm.embedding") as adapter:
         adapter.return_value.data = [{"embedding": [0.0] * 1536}]
         result = embedding._embed_sync(["synthetic test"])
     assert len(result[0]) == get_embedding_dimension(settings.embedding_model) == 1536
@@ -192,7 +192,7 @@ def test_custom_embedding_dimensions_reach_vector_store():
     settings = model_settings(embedding_model="custom-alias", embedding_dimension=1024)
     with (
         patch("app.domain.embeddings.get_settings", return_value=settings),
-        patch("app.domain.embeddings._ragit_get_vector_store") as store,
+        patch("app.domain.embeddings._ragnor_get_vector_store") as store,
     ):
         assert get_embedding_dimension() == 1024
         assert get_embedding_dimension("custom-alias") == 1024

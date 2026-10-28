@@ -3,11 +3,9 @@
 # OmniCare Financial Backend - Production Dockerfile
 # ==============================================================================
 # Build context: the REPOSITORY ROOT (see docker-compose.yml), not ./backend.
-# The generic RAG machinery comes from the published ``ragit``
-# package, pinned as a git dependency in backend/pyproject.toml
-# (ragit[pgvector] @ github.com/eslam-aboutaleb/ragit@v0.2.0).
-# uv needs git to clone that dependency, so git is installed
-# below alongside the build toolchain.
+# The generic RAG machinery comes from the published ``ragnor``
+# package, pinned to version 0.4.1 with the pgvector extra in
+# backend/pyproject.toml.
 # ==============================================================================
 
 FROM python:3.11-slim
@@ -18,12 +16,10 @@ ENV PYTHONUNBUFFERED=1 \
     UV_NO_CACHE=1 \
     UV_PYTHON_PREFER_SYSTEM=1
 
-# Install system dependencies (git is required by uv to
-# clone the pinned ragit git dependency)
+# Install system dependencies required to build Python packages
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     curl \
-    git \
     && rm -rf /var/lib/apt/lists/*
 
 # Install UV package manager (pinned version; the image uses
@@ -36,7 +32,7 @@ ENV PATH="/root/.local/bin:$PATH"
 WORKDIR /app
 
 # Copy dependency manifest and install the backend package.
-# The pinned ragit git dependency is resolved from GitHub
+# The pinned ragnor distribution is resolved from PyPI
 # as part of this install.
 COPY backend/pyproject.toml ./
 RUN uv pip install --system .

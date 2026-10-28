@@ -14,7 +14,7 @@ LITELLM_EMBEDDING_MODEL=openai/rag-embedding
 EMBEDDING_DIMENSION=1536
 ```
 
-`LlmFactory` constructs the ADK LiteLLM model, and `EmbeddingFactory` uses ragit's
+`LlmFactory` constructs the ADK LiteLLM model, and `EmbeddingFactory` uses ragnor's
 LiteLLM provider. Both pass the configured base URL and virtual token directly to
 LiteLLM. The `openai/` prefix selects the OpenAI-compatible protocol; the gateway
 receives the aliases `agent-tools` and `rag-embedding`.
@@ -45,7 +45,7 @@ docker compose up -d --force-recreate backend embedding-drain
 ```
 
 Set `EMBEDDING_DIMENSION` for custom model aliases; known embedding models use
-ragit's dimension registry. The gateway embedding alias produces 1,536-dimensional vectors. Existing vectors
+ragnor's dimension registry. The gateway embedding alias produces 1,536-dimensional vectors. Existing vectors
 can be retained when the gateway uses the same `text-embedding-3-small` model;
 reindex the corpus if the gateway changes the underlying embedding model.
 
@@ -140,13 +140,13 @@ Testing:
 
 ## Running Tests
 
-OmniCare Financial includes automated tests with Pytest covering authentication, RAG ingestion, vector retrieval, agent tool execution, idempotency, and API endpoints. The backend suite runs against a dedicated test database (`OMNICARE_TEST_DATABASE_URL`) and exercises core paths and corner cases (empty inputs, invalid parameters, locking, stale-job reclaim, versioning, and cross-user isolation). It is organised in three layers: a tier of API-level suites under `tests/`, domain-level tests under `tests/domain/`, database-backed integration tests under `tests/integration/`, and a frozen HTTP contract suite under `tests/contract/`. The generic RAG machinery is covered by the ragit package's own test suite, published from [github.com/eslam-aboutaleb/ragit](https://github.com/eslam-aboutaleb/ragit).
+OmniCare Financial includes automated tests with Pytest covering authentication, RAG ingestion, vector retrieval, agent tool execution, idempotency, and API endpoints. The backend suite runs against a dedicated test database (`OMNICARE_TEST_DATABASE_URL`) and exercises core paths and corner cases (empty inputs, invalid parameters, locking, stale-job reclaim, versioning, and cross-user isolation). It is organised in three layers: a tier of API-level suites under `tests/`, domain-level tests under `tests/domain/`, database-backed integration tests under `tests/integration/`, and a frozen HTTP contract suite under `tests/contract/`. The generic RAG machinery is covered by the ragnor package's own test suite, published from [github.com/eslam-aboutaleb/ragnor](https://github.com/eslam-aboutaleb/ragnor).
 
 ### Run Tests Locally
 
 ```bash
 # Backend tests (from the repository root; the backend
-# resolves ragit from the pinned git dependency)
+# resolves Ragnor from the pinned PyPI dependency)
 cd backend
 uv pip install -e .
 python -m pytest tests/ -v

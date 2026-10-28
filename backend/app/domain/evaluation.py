@@ -1,12 +1,12 @@
-"""OmniCare RAG evaluation wiring over ragit.
+"""OmniCare RAG evaluation wiring over ragnor.
 
 The evaluation harness (retrieval metrics, answer judges,
-the two-phase runner) is domain-agnostic (ragit); this
+the two-phase runner) is domain-agnostic (ragnor); this
 module is the OmniCare binding: the curated evaluation
 dataset grounded in ``sample_policy.md`` and the
 ``run_evaluation()`` entry point that wires the OmniCare
 hybrid retriever, the curated dataset, and the OmniCare
-answer generator into ragit's runner.
+answer generator into ragnor's runner.
 
 What each mode actually measures -- the names are only
 honest if this stays true:
@@ -47,13 +47,13 @@ from typing import Any
 from app.core.config import get_settings
 from app.domain.evaluation_runs import record_eval_run
 from app.domain.policies.retriever import retrieve_hybrid
-from ragit.evaluation.dataset import Difficulty, EvalSample
-from ragit.evaluation.runner import (
+from ragnor.evaluation.dataset import Difficulty, EvalSample
+from ragnor.evaluation.runner import (
     AnswerFunction,
     EvalConfig,
     EvalResult,
     RetrievalFunction,
-    run_evaluation as _ragit_run_evaluation,
+    run_evaluation as _ragnor_run_evaluation,
 )
 
 logger = logging.getLogger(__name__)
@@ -131,7 +131,7 @@ def _refusal_sample(**kwargs: Any) -> EvalSample:
     """Build an unanswerable sample, stamping its expected behaviour.
 
     Args:
-        **kwargs: Forwarded to :class:`~ragit.evaluation.dataset.EvalSample`.
+        **kwargs: Forwarded to :class:`~ragnor.evaluation.dataset.EvalSample`.
 
     Returns:
         The sample with ``expected_behavior`` recorded in its metadata.
@@ -684,7 +684,7 @@ async def agent_answer_fn(query: str, context: str) -> str:
 
     Args:
         query: The evaluation question, passed to the agent as a user message.
-        context: The context ragit retrieved. Ignored: the agent runs the real
+        context: The context ragnor retrieved. Ignored: the agent runs the real
             ``query_policy`` tool and therefore retrieves its own. Conditioning
             it on a context it never saw would make the faithfulness score
             measure an answer that does not exist.
@@ -714,7 +714,7 @@ async def context_proxy_answer_fn(query: str, context: str) -> str:
 
     Args:
         query: Ignored; nothing is generated, only relayed.
-        context: The context ragit retrieved for this sample.
+        context: The context ragnor retrieved for this sample.
 
     Returns:
         The retrieved context, or the assistant's own no-information sentence
@@ -760,12 +760,12 @@ async def run_evaluation(
     """Run a complete RAG evaluation.
 
     Injects the OmniCare hybrid retriever, the curated evaluation dataset, and
-    the resolved answer generator into ragit's runner. ``context`` mode scores
+    the resolved answer generator into ragnor's runner. ``context`` mode scores
     the retrieved context (a retrieval diagnosis); ``end-to-end`` mode scores
     what the answer generator produced (the model, when one is available).
 
     Args:
-        config: Evaluation configuration. If None, uses ragit's defaults.
+        config: Evaluation configuration. If None, uses ragnor's defaults.
         answer_fn: Answer generator ``async (query, context) -> answer`` used
             for ``end-to-end`` mode. When omitted, the generator is resolved by
             :func:`resolve_answer_function` and recorded in the result.
@@ -791,7 +791,7 @@ async def run_evaluation(
     if config.mode == "end-to-end":
         resolved_fn, answer_source = resolve_answer_function(answer_fn)
 
-    result = await _ragit_run_evaluation(
+    result = await _ragnor_run_evaluation(
         config,
         _retrieval_fn,
         dataset,
@@ -811,13 +811,13 @@ def _annotate_result(
 ) -> None:
     """Add the refusal-behaviour metrics and provenance to a finished result.
 
-    ragit reports faithfulness, relevance, completeness, and conciseness. None of
+    ragnor reports faithfulness, relevance, completeness, and conciseness. None of
     those notice an answer that invents coverage for a question the corpus
     cannot answer, so a run can look excellent while the model does the one
     thing that costs the company money. These metrics close that hole.
 
     Args:
-        result: The ragit result to annotate, modified in place.
+        result: The ragnor result to annotate, modified in place.
         dataset: The dataset the run scored, in the runner's sample order.
         answer_source: Which answer generator produced the answers.
     """

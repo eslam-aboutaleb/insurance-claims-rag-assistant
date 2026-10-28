@@ -1,14 +1,14 @@
-"""Translate application configuration at the ragit dependency boundary."""
+"""Translate application configuration at the ragnor dependency boundary."""
 
 from typing import Any
 
-from ragit.embeddings import get_embedding_dimension, register_dimension
+from ragnor.embeddings import get_embedding_dimension, register_dimension
 
 from app.core.config import Settings
 
 
-class RagitSettingsAdapter:
-    """Expose ragit 0.3's credential protocol without vendor names in Settings."""
+class RagnorSettingsAdapter:
+    """Expose Ragnor's credential protocol without vendor names in Settings."""
 
     def __init__(self, settings: Settings) -> None:
         self._settings = settings

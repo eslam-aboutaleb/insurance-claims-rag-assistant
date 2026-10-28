@@ -24,7 +24,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
-from ragit.jobs import process_pending_jobs as _ragit_process_pending_jobs
+from ragnor.jobs import process_pending_jobs as _ragnor_process_pending_jobs
 from sqlalchemy import func, select, text, update
 
 from app.api.v1 import claims as claims_api
@@ -726,8 +726,8 @@ def test_two_workers_claim_concurrently_without_double_delivery() -> None:
         # Both passes run on the same loop and both select the same pending row:
         # exactly one of them may reach ``process``.
         await asyncio.gather(
-            _ragit_process_pending_jobs(store, first, limit=10, worker_id="worker-a"),
-            _ragit_process_pending_jobs(store, second, limit=10, worker_id="worker-b"),
+            _ragnor_process_pending_jobs(store, first, limit=10, worker_id="worker-a"),
+            _ragnor_process_pending_jobs(store, second, limit=10, worker_id="worker-b"),
         )
         return first.delivered + second.delivered
 
@@ -976,12 +976,12 @@ def test_the_unread_filter_only_returns_unacknowledged_rows(
     assert [item["claim_id"] for item in unread.json()["notifications"]] == ["CLM-UNR2"]
 
 
-def test_main_wires_app_store_and_processor_into_ragit_drainer() -> None:
+def test_main_wires_app_store_and_processor_into_ragnor_drainer() -> None:
     """The entry point builds the OmniCare store and processor and passes settings."""
     from app.core.config import settings
     from app.workers import notification_drain
 
-    with patch.object(notification_drain, "_ragit_main", return_value=0) as mock_main:
+    with patch.object(notification_drain, "_ragnor_main", return_value=0) as mock_main:
         assert notification_drain.main() == 0
 
     args, kwargs = mock_main.call_args

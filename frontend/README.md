@@ -12,11 +12,9 @@ npm test
 npm run build
 ```
 
-The `postcss-selector-parser` override selects the patched 7.1.7 release for
-Tailwind 3 and postcss-nested, addressing GHSA-rj75-hqrm-r3gf without changing the
-styling framework. The production CSS was compared byte for byte before and
-after the parser update. Recheck the audit and CSS output before removing or
-changing this override.
+The frontend uses Tailwind CSS 4 through the Vite plugin, retaining the shared
+color tokens in `tailwind.config.js`. The `postcss-selector-parser` override keeps
+transitive consumers on the patched 7.1.7 release.
 
 ## README screenshots
 
