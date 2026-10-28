@@ -44,8 +44,9 @@ def e2e_user(test_client, real_ingest_policy):
 
 
 @pytest.mark.skipif(
-    not settings.openai_api_key or settings.openai_api_key == "sk-your-openai-api-key-here",
-    reason="Real OpenAI API key not configured; set OPENAI_API_KEY in .env",
+    not settings.litellm_api_key.get_secret_value()
+    or settings.litellm_api_key.get_secret_value() == "sk-your-openai-api-key-here",
+    reason="LLM credential not configured; set LITELLM_API_KEY in .env",
 )
 class TestLiveLLMChatE2E:
     """End-to-end chat tests using the real LLM pipeline."""
@@ -158,7 +159,7 @@ class TestLiveLLMChatE2E:
         # credential material or verbatim system-prompt content.
         # Compare into a boolean first. pytest's assertion rewriting renders operands,
         # so asserting `secret not in text` would print the secret into test logs.
-        configured_key = (settings.openai_api_key or "").strip().lower()
+        configured_key = settings.litellm_api_key.get_secret_value().strip().lower()
         if configured_key:
             leaked_api_key = configured_key[:16] in response_text
             assert not leaked_api_key, "response leaked the API key"

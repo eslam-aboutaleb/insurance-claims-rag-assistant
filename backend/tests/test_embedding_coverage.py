@@ -24,6 +24,7 @@ class TestEmbedding:
             mock_settings = MagicMock()
             mock_settings.embedding_provider = "litellm"
             mock_settings.embedding_model = "custom-model"
+            mock_settings.embedding_dimension = None
             mock_get.return_value = mock_settings
             func = EmbeddingFactory.get_embedding_function()
             assert func.model_name == "custom-model"

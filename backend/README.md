@@ -248,10 +248,10 @@ Configuration is strictly centralized in [`app/core/config.py`](file:///Users/es
 | `HOST`                   | `str`       | `0.0.0.0`                        | Valid IP / hostname                                    | Interface to bind Uvicorn.                                    |
 | `PORT`                   | `int`       | `8000`                           | Integer `1` to `65535`                                 | Server TCP port.                                              |
 | `CORS_ORIGINS`           | `list[str]` | `["http://localhost:3000", ...]` | Comma-separated string, JSON list, or list             | Whitelisted CORS origins for web clients.                     |
-| `OPENAI_API_KEY`         | `str`       | `""`                             | Valid secret key string                                | OpenAI API key utilized by LiteLLM.                           |
-| `OPENAI_API_BASE`        | `str`       | `""`                             | Valid URL or empty string                              | Optional OpenAI API base URL override for LiteLLM.            |
-| `LLM_MODEL`              | `str`       | `openai/gpt-4o-mini`             | `provider/model_name` string                           | Model routed via LiteLLM.                                     |
-| `EMBEDDING_MODEL`        | `str`       | `text-embedding-3-small`          | Pretrained model identifier                            | Embedding model name used by LiteLLM for pgvector.            |
+| `LITELLM_API_KEY`         | `SecretStr`       | `""`                             | Valid secret key string                                | Provider API key or gateway virtual token passed to LiteLLM.                           |
+| `LITELLM_API_BASE`        | `str`       | `""`                             | Valid URL or empty string                              | Optional provider or gateway base URL passed to LiteLLM.            |
+| `LITELLM_MODEL`              | `str`       | `openai/gpt-4o-mini`             | `provider/model_name` string                           | Model routed via LiteLLM.                                     |
+| `LITELLM_EMBEDDING_MODEL`        | `str`       | `text-embedding-3-small`          | Pretrained model identifier                            | Embedding model name used by LiteLLM for pgvector.            |
 | `INGEST_ON_STARTUP`      | `bool`      | `true`                            | `true` / `false`                                       | Index policy documents during API startup.                    |
 | `EMBEDDING_DRAIN_INTERVAL_SECONDS` | `float` | `5.0`                     | Greater than `0.1`                                     | Idle sleep of the embedding drainer.                          |
 | `EMBEDDING_DRAIN_BATCH_SIZE` | `int`   | `10`                              | Greater than `0`                                       | Jobs claimed per embedding drainer pass.                      |
@@ -259,9 +259,9 @@ Configuration is strictly centralized in [`app/core/config.py`](file:///Users/es
 
 ### Embedding dimension
 
-The vector dimension is owned by [`app/rag/embedding_dimensions.py`](app/rag/embedding_dimensions.py). Call `get_embedding_dimension()` rather than hardcoding `1536`; it resolves the dimension for the configured `EMBEDDING_MODEL` and is the single source of truth used by ingestion, retrieval, and the vector stores. Vectors are checked by `pgvector_store._validate_embedding`, which every write and query path must call.
+The vector dimension is owned by [`app/domain/embeddings.py`](app/domain/embeddings.py). Call `get_embedding_dimension()` rather than hardcoding `1536`; it resolves the dimension for the configured `LITELLM_EMBEDDING_MODEL` and is the single source of truth used by ingestion, retrieval, and the vector stores. Vectors are checked by `pgvector_store._validate_embedding`, which every write and query path must call.
 
-The two pgvector columns are still declared with a literal `Vector(1536)` in `app/models/claims/claim.py` and `app/models/policies/policy_chunk.py`. Widening or narrowing the stored column requires an `ALTER TABLE` migration and is not covered by the runtime check, so treat a change of `EMBEDDING_MODEL` as a schema migration, not a configuration change.
+The two pgvector columns are still declared with a literal `Vector(1536)` in `app/models/claims/claim.py` and `app/models/policies/policy_chunk.py`. Widening or narrowing the stored column requires an `ALTER TABLE` migration and is not covered by the runtime check, so treat a change of `LITELLM_EMBEDDING_MODEL` as a schema migration, not a configuration change.
 
 FastAPI endpoints consume settings through `Depends(get_settings)`:
 
@@ -314,7 +314,7 @@ This enables seamless mock injection during unit and integration testing without
 
    ```bash
    cp ../.env.example .env
-   # Add your OPENAI_API_KEY in .env
+   # Add your LITELLM_API_KEY in .env
    ```
 
 5. **Run the Policy Ingestion Pipeline** (Pre-computes embeddings):
@@ -385,8 +385,8 @@ fixed by the current work; each names what closing it would involve.
 ### A. pgvector column dimensions are still literals
 
 `app/models/claims/claim.py` and `app/models/policies/policy_chunk.py` declare `Vector(1536)` directly
-instead of deriving it from `app/rag/embedding_dimensions.py`. The runtime dimension is
-now checked centrally, but changing `EMBEDDING_MODEL` to a model of a different width
+instead of deriving it from `app/domain/embeddings.py`. The runtime dimension is
+now checked centrally, but changing `LITELLM_EMBEDDING_MODEL` to a model of a different width
 still requires an `ALTER TABLE` migration for both tables. Until that migration exists,
 the two values must be changed together by hand.
 
@@ -408,7 +408,7 @@ token has no `jti` claim to key on. Frozen by
 
 ### D. `tests/llm_e2e` depends on the live OpenAI API
 
-`tests/test_llm_e2e.py` is gated on `OPENAI_API_KEY` and asserts on free-form model
+`tests/test_llm_e2e.py` is gated on `LITELLM_API_KEY` and asserts on free-form model
 output, so it fails intermittently and is slow. It is excluded from the frozen contract,
 which uses `tests/contract/llm_double.py` instead. Treat it as a manual smoke suite, not
 as a CI gate.
