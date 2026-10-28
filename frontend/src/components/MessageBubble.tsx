@@ -21,8 +21,8 @@
  * this browsing session rather than the caller's history.
  *
  * Layout:
- *   - User messages are right-aligned with an ochre background.
- *   - Assistant messages are left-aligned with a sand background and
+ *   - User messages are right-aligned with a blue background.
+ *   - Assistant messages are left-aligned with a white background and
  *     include the bot avatar.
  *   - Error messages use a red-tinted background and error icon.
  */
@@ -45,7 +45,7 @@ import {
 import ReactMarkdown, { Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
-import { vscDarkPlus } from "react-syntax-highlighter/dist/esm/styles/prism";
+import { oneLight } from "react-syntax-highlighter/dist/esm/styles/prism";
 import SourcesBadge from "./SourcesBadge";
 import ToolCallBadge from "./ToolCallBadge";
 import {
@@ -144,7 +144,11 @@ const markdownComponents: Components = {
     if (match) {
       return (
         <SyntaxHighlighter
-          style={vscDarkPlus}
+          style={oneLight}
+          customStyle={{
+            background: "rgb(var(--color-surface-secondary))",
+            color: "rgb(var(--color-text))",
+          }}
           language={match[1]}
           PreTag="div"
           className="rounded-lg !my-4"

@@ -9,20 +9,23 @@
 
   :root {
     --font-inter: "Inter", system-ui, sans-serif;
-    --color-primary: #b87318;
-    --color-primary-dark: #8a5310;
-    --color-bg: #faf9f6;
-    --color-surface: #ffffff;
-    --color-surface-secondary: #f5f2ec;
-    --color-text: #24211e;
-    --color-text-secondary: #6f6a63;
-    --color-text-tertiary: #858078;
-    --color-border: #e5e0d9;
-    --color-border-strong: #d7d0c7;
-    --color-success: #2f7d5a;
-    --color-warning: #b87a2a;
-    --color-error: #b94a48;
-    --color-info: #456b9c;
+    color-scheme: light;
+    /* Shared light palette for pages, components, and notifications. */
+    --color-primary: 59 130 246;
+    --color-primary-dark: 29 78 216;
+    --color-bg: 252 252 252;
+    --color-surface: 255 255 255;
+    --color-surface-secondary: 244 244 244;
+    --color-text: 33 33 33;
+    --color-text-secondary: 103 103 103;
+    --color-text-tertiary: 112 112 112;
+    --color-border: 234 234 234;
+    --color-border-strong: 211 211 211;
+    --color-success: 31 122 79;
+    --color-warning: 148 96 0;
+    --color-error: 185 28 28;
+    /* A deeper blue keeps white button labels and small links readable. */
+    --color-info: 37 99 235;
     --radius-sm: 8px;
     --radius-md: 12px;
     --radius-lg: 16px;
@@ -73,7 +76,7 @@
     @apply my-4;
   }
   .prose code {
-    @apply text-ochre-800 bg-ochre-50 px-1 py-0.5 rounded text-[13px] font-mono;
+    @apply text-insurance-ink bg-insurance-surface-secondary px-1 py-0.5 rounded text-[13px] font-mono;
   }
   .prose pre code {
     @apply bg-transparent p-0;

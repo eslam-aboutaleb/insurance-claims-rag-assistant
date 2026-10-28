@@ -178,7 +178,7 @@ export default function ChatPage() {
       {sidebarOpen && (
         <div
           id="sidebar-overlay"
-          className="fixed inset-0 bg-warm-ink/15 backdrop-blur-sm z-10 md:hidden"
+          className="fixed inset-0 bg-insurance-ink/15 backdrop-blur-sm z-10 md:hidden"
           onClick={() => setSidebarOpen(false)}
           data-testid="sidebar-overlay"
           aria-label="Close sidebar"
@@ -210,7 +210,7 @@ export default function ChatPage() {
               </div>
               <button
                 onClick={() => navigate("/chat")}
-                className="px-3 py-2 bg-insurance-info text-white text-xs font-medium rounded-lg hover:bg-insurance-ink-secondary transition-colors"
+                className="px-3 py-2 bg-insurance-info text-white text-xs font-medium rounded-lg hover:bg-insurance-info-hover transition-colors"
               >
                 Start a new chat
               </button>
@@ -225,7 +225,7 @@ export default function ChatPage() {
           <button
             id="mobile-menu-toggle"
             onClick={() => setSidebarOpen(true)}
-            className="p-2 text-warm-ink bg-warm-surface border border-warm-border rounded-lg shadow-subtle hover:shadow-soft transition-subtle"
+            className="p-2 text-insurance-ink bg-insurance-surface border border-insurance-border rounded-lg shadow-subtle hover:shadow-soft transition-subtle"
             aria-label="Open menu"
             data-testid="mobile-menu-toggle"
           >
