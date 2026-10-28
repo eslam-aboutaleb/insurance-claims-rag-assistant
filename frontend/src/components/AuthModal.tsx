@@ -110,7 +110,7 @@ export default function AuthModal({
   };
 
   return (
-    <div className="fixed inset-0 bg-insurance-ink/20 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 bg-insurance-bg z-50 flex items-center justify-center p-4">
       <main className="bg-insurance-surface border border-insurance-border rounded-2xl shadow-lifted w-full max-w-md max-h-[calc(100vh-2rem)] overflow-y-auto">
         <div className="p-6 md:p-8">
           <div className="mb-8 text-center">
@@ -293,7 +293,7 @@ export default function AuthModal({
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full bg-insurance-info text-white font-semibold p-3.5 rounded-xl shadow-soft hover:shadow-medium transition-all duration-200 disabled:opacity-50"
+              className="w-full bg-insurance-info text-white font-semibold p-3.5 rounded-xl shadow-soft hover:bg-insurance-info-hover hover:shadow-medium transition-all duration-200 disabled:opacity-50"
             >
               {isLoading
                 ? "Please wait..."

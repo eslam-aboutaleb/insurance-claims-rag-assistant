@@ -17,3 +17,20 @@ Tailwind 3 and postcss-nested, addressing GHSA-rj75-hqrm-r3gf without changing t
 styling framework. The production CSS was compared byte for byte before and
 after the parser update. Recheck the audit and CSS output before removing or
 changing this override.
+
+## README screenshots
+
+The six images in `public/readme/` are captured from the frontend using Playwright
+and synthetic API fixtures. No running backend, LLM key, or customer data is needed.
+The fixtures demonstrate appearance; they do not validate backend or model behavior.
+
+From `frontend/`, start `npm run dev`, then run in another terminal:
+
+```sh
+npx playwright install chromium
+node scripts/readme-screenshots.mjs
+```
+
+Set `SCREENSHOT_BASE_URL` if the frontend runs at a different local URL. The script
+captures the sign-in page, empty chat, conversation sidebar, policy answer, expanded
+tool details, and claim status at 1440 × 1000 with the light theme and reduced motion.

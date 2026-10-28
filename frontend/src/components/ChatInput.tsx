@@ -101,7 +101,7 @@ export default function ChatInput({
         id="send-button"
         onClick={handleSubmit}
         disabled={isLoading || !value.trim()}
-        className="absolute right-2 bottom-2 p-2 bg-insurance-info text-white rounded-xl hover:bg-insurance-ink-secondary disabled:bg-insurance-border disabled:text-insurance-ink-tertiary transition-all duration-200 flex-shrink-0 shadow-subtle disabled:shadow-none"
+        className="absolute right-2 bottom-2 p-2 bg-insurance-accent text-white rounded-xl hover:bg-insurance-info-hover disabled:bg-insurance-border disabled:text-insurance-ink-tertiary transition-all duration-200 flex-shrink-0 shadow-subtle disabled:shadow-none"
         data-testid="send-button"
         aria-label="Send message"
       >
