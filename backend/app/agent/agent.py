@@ -19,7 +19,6 @@ Architecture Note:
 from __future__ import annotations
 
 import logging
-import os
 import time
 import uuid
 from collections import OrderedDict
@@ -30,7 +29,6 @@ from google.adk.agents import LlmAgent
 from google.adk.agents.callback_context import CallbackContext
 from google.adk.agents.run_config import RunConfig, StreamingMode
 from google.adk.events import Event
-from google.adk.models.lite_llm import LiteLlm
 from google.adk.models.llm_request import LlmRequest
 from google.adk.runners import Runner
 from google.adk.sessions import BaseSessionService, InMemorySessionService, Session, State
@@ -54,6 +52,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.exc import IntegrityError
 
 from app.agent.context import current_user_id
+from app.agent.models import LlmFactory
 from app.agent.prompts import SYSTEM_INSTRUCTION
 from app.agent.registry import build_default_registry
 from app.core.config import Settings, settings
@@ -478,18 +477,6 @@ runner: Runner | None = None
 _user_sessions: OrderedDict[str, str] = OrderedDict()
 
 
-def configure_llm() -> None:
-    """Configure LiteLLM environment variables and defaults.
-
-    LiteLLM reads OpenAI-style environment variables, so they are exported
-    from settings here once at startup instead of being passed around.
-    """
-    if settings.openai_api_key:
-        os.environ["OPENAI_API_KEY"] = settings.openai_api_key
-    if settings.openai_api_base:
-        os.environ["OPENAI_API_BASE"] = settings.openai_api_base
-
-
 def create_agent(registry: Any, agent_settings: Settings) -> Any:
     """Create the ADK agent with per-agent model configuration.
 
@@ -503,21 +490,7 @@ def create_agent(registry: Any, agent_settings: Settings) -> Any:
     """
     agent = LlmAgent(
         name="omnicare_assistant",
-        model=LiteLlm(
-            model=agent_settings.llm_model,
-            api_key=agent_settings.openai_api_key,
-            api_base=agent_settings.openai_api_base,
-            **(
-                {"temperature": agent_settings.llm_temperature}
-                if agent_settings.llm_temperature
-                else {}
-            ),
-            **(
-                {"max_tokens": agent_settings.llm_max_tokens}
-                if agent_settings.llm_max_tokens
-                else {}
-            ),
-        ),
+        model=LlmFactory.create_model(agent_settings),
         # The reviewed prompt lives in the prompts module; the setting overrides
         # it for a deployment without a code change.
         instruction=agent_settings.system_prompt or SYSTEM_INSTRUCTION,

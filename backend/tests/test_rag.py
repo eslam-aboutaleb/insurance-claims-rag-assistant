@@ -146,7 +146,10 @@ async def test_ingest_policy_success(tmp_path):
     assert pipeline_kwargs["store"] is mock_store
     assert pipeline_kwargs["embedder"] is mock_embedder
     assert pipeline_kwargs["session_factory"] is async_session_factory
-    assert pipeline_kwargs["settings"] is get_settings()
+    assert pipeline_kwargs["settings"].embedding_model == get_settings().embedding_model
+    assert pipeline_kwargs["settings"].openai_api_key == (
+        get_settings().litellm_api_key.get_secret_value()
+    )
     assert pipeline_kwargs["version_id_key"] == "policy_version_id"
     assert pipeline_kwargs["source_id_key"] == "policy_id"
     # The adapter reports the snapshot chunker version so stored

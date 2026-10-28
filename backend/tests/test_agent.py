@@ -1,42 +1,16 @@
 """
 Tests for app.agent.agent module.
 
-Covers configure_llm, session eviction, and run_agent/run_agent_stream
+Covers session eviction and run_agent/run_agent_stream
 source/citation extraction paths.
 """
 
-import os
 import uuid
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.agent.agent import configure_llm, reset_user_session, run_agent, run_agent_stream
-
-
-def test_configure_llm_sets_env(monkeypatch):
-    monkeypatch.setattr("app.agent.agent.settings.openai_api_key", "test-key")
-    monkeypatch.setattr(
-        "app.agent.agent.settings.openai_api_base", "https://test.openai.azure.com/v1"
-    )
-
-    configure_llm()
-
-    assert os.environ.get("OPENAI_API_KEY") == "test-key"
-    assert os.environ.get("OPENAI_API_BASE") == "https://test.openai.azure.com/v1"
-
-    os.environ.pop("OPENAI_API_KEY", None)
-    os.environ.pop("OPENAI_API_BASE", None)
-
-
-def test_configure_llm_no_key(monkeypatch):
-    monkeypatch.setattr("app.agent.agent.settings.openai_api_key", None)
-    monkeypatch.setattr("app.agent.agent.settings.openai_api_base", None)
-
-    configure_llm()
-
-    assert "OPENAI_API_KEY" not in os.environ
-    assert "OPENAI_API_BASE" not in os.environ
+from app.agent.agent import reset_user_session, run_agent, run_agent_stream
 
 
 @pytest.mark.asyncio

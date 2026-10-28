@@ -36,7 +36,8 @@ jobs:
       DATABASE_URL: postgresql+asyncpg://omnicare:omnicare_password@127.0.0.1:5432/omnicare_test
       JWT_SECRET_KEY: ci-only-not-a-real-secret-32chars-min
       ENVIRONMENT: test
-      OPENAI_API_KEY: ""
+      LITELLM_API_KEY: ""
+      LITELLM_API_BASE: ""
       OMNICARE_EVAL_LIVE: ""
       OMNICARE_EVAL_PERSIST: "0"
     defaults:
