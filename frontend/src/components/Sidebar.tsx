@@ -361,7 +361,7 @@ export default function Sidebar({
           id="new-chat-button"
           type="button"
           onClick={onNewChat}
-          className="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl bg-insurance-info text-white text-sm font-medium hover:bg-insurance-ink-secondary transition-all duration-200"
+          className="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl bg-insurance-info text-white text-sm font-medium hover:bg-insurance-info-hover transition-all duration-200"
           data-testid="new-chat-button"
           aria-label="Start a new chat"
         >

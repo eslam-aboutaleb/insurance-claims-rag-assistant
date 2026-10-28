@@ -21,7 +21,8 @@ from pathlib import Path
 path = Path(sys.argv[1])
 updates = {
     "POSTGRES_PASSWORD": "ci_only_test_password",
-    "OPENAI_API_KEY": "",
+    "LITELLM_API_KEY": "",
+    "LITELLM_API_BASE": "",
     "INGEST_ON_STARTUP": "false",
     "OMNICARE_INGEST_PROCEDURES": "false",
 }
@@ -44,7 +45,8 @@ fi
 
 if [[ "${CI:-}" == "true" ]]; then
   export POSTGRES_PASSWORD="ci_only_test_password"
-  export OPENAI_API_KEY=""
+  export LITELLM_API_KEY=""
+  export LITELLM_API_BASE=""
 fi
 
 npx playwright test --reporter=line

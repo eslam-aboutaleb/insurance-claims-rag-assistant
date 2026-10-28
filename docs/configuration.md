@@ -1,15 +1,67 @@
 # Configuration and Environment Variables
 
+## LLM gateway configuration
+
+The app supports the [llm-gateway](https://github.com/eslam-aboutaleb/llm-gateway)
+through LiteLLM and settings-driven factories. Configure the gateway by setting
+these values in the project-root `.env` or the backend process environment:
+
+```dotenv
+LITELLM_API_BASE=https://YOUR_GATEWAY_DOMAIN/v1
+LITELLM_API_KEY=<issued virtual key>
+LITELLM_MODEL=openai/agent-tools
+LITELLM_EMBEDDING_MODEL=openai/rag-embedding
+EMBEDDING_DIMENSION=1536
+```
+
+`LlmFactory` constructs the ADK LiteLLM model, and `EmbeddingFactory` uses ragnor's
+LiteLLM provider. Both pass the configured base URL and virtual token directly to
+LiteLLM. The `openai/` prefix selects the OpenAI-compatible protocol; the gateway
+receives the aliases `agent-tools` and `rag-embedding`.
+
+These are application settings passed explicitly to LiteLLM. To switch to a native
+provider, set its LiteLLM model identifier (for example, `anthropic/claude-sonnet-4-5`),
+set `LITELLM_API_KEY` to that provider's key, and leave `LITELLM_API_BASE` empty to use
+the provider's default endpoint. Choose an embedding model supported by your
+embedding provider. Embeddings share the configured endpoint and key by default.
+Set `LITELLM_EMBEDDING_API_KEY` and `LITELLM_EMBEDDING_API_BASE` to override them
+independently. An explicitly empty embedding base URL selects the embedding
+provider's default endpoint instead of inheriting the chat gateway.
+
+The legacy names `OPENAI_API_KEY`, `OPENAI_API_BASE`, `LLM_MODEL`, and
+`EMBEDDING_MODEL` remain accepted. When both versions are present in the same
+configuration source, the `LITELLM_*` name takes precedence. Process environment
+variables take precedence over `.env` files.
+
+Use a virtual token issued by the gateway with access to both aliases. Token
+issuance belongs to the gateway's administration; the app needs only the inference
+URL and virtual token. Keep the token in backend configuration.
+
+Restart the backend and embedding worker after configuration. For Docker Compose, recreate
+the services so they reload `.env`:
+
+```bash
+docker compose up -d --force-recreate backend embedding-drain
+```
+
+Set `EMBEDDING_DIMENSION` for custom model aliases; known embedding models use
+ragnor's dimension registry. The gateway embedding alias produces 1,536-dimensional vectors. Existing vectors
+can be retained when the gateway uses the same `text-embedding-3-small` model;
+reindex the corpus if the gateway changes the underlying embedding model.
+
 ## Environment Variables
 
 Configure these settings in `.env` (or pass via container environment):
 
 | Variable                 | Default Value                 | Required | Purpose & Description                                                                               |
 | :----------------------- | :---------------------------- | :------: | :-------------------------------------------------------------------------------------------------- |
-| `OPENAI_API_KEY`         | _(None)_                      | **Yes**  | OpenAI API secret key required when using OpenAI models.                                            |
-| `OPENAI_API_BASE`        | `""`                          |    No    | Optional OpenAI API base URL override for LiteLLM routing.                                          |
-| `LLM_MODEL`              | `openai/gpt-4o-mini`          |    No    | Model descriptor for LiteLLM router (e.g. `openai/gpt-4o`, `anthropic/claude-3-5-sonnet-20241022`). |
-| `EMBEDDING_MODEL`        | `text-embedding-3-small`      |    No    | Embedding model name used by LiteLLM for pgvector embeddings.                                                       |
+| `LITELLM_API_KEY`         | `""`                          | No  | Gateway virtual key, or provider API key when calling OpenAI directly.                              |
+| `LITELLM_API_BASE`        | `""`                          |    No    | Optional provider or gateway base URL passed to LiteLLM.                                          |
+| `LITELLM_MODEL`              | `openai/gpt-4o-mini`          |    No    | Model descriptor for LiteLLM router (e.g. `openai/gpt-4o`, `anthropic/claude-3-5-sonnet-20241022`). |
+| `LITELLM_EMBEDDING_MODEL`        | `text-embedding-3-small`      |    No    | Embedding model name used by LiteLLM for pgvector embeddings.                                                       |
+| `LITELLM_EMBEDDING_API_KEY` | _(unset)_ | No | Separate embedding key; unset inherits `LITELLM_API_KEY`. |
+| `LITELLM_EMBEDDING_API_BASE` | _(unset)_ | No | Separate embedding endpoint; unset inherits `LITELLM_API_BASE`, empty uses the provider default. |
+| `EMBEDDING_DIMENSION` | _(unset)_ | No | Positive vector width for custom embedding models or aliases. Database vector columns must match. |
 | `DATABASE_URL`           | _(None)_                      | **Yes**  | SQLAlchemy async PostgreSQL connection string.                                                       |
 | `POSTGRES_USER`          | `omnicare`                    |    No    | PostgreSQL username for the database service.                                                       |
 | `POSTGRES_PASSWORD`      | _(None)_                      | **Yes**  | PostgreSQL password for the database service. Must be set for the container to start.               |
@@ -88,13 +140,13 @@ Testing:
 
 ## Running Tests
 
-OmniCare Financial includes automated tests with Pytest covering authentication, RAG ingestion, vector retrieval, agent tool execution, idempotency, and API endpoints. The backend suite runs against a dedicated test database (`OMNICARE_TEST_DATABASE_URL`) and exercises core paths and corner cases (empty inputs, invalid parameters, locking, stale-job reclaim, versioning, and cross-user isolation). It is organised in three layers: a tier of API-level suites under `tests/`, domain-level tests under `tests/domain/`, database-backed integration tests under `tests/integration/`, and a frozen HTTP contract suite under `tests/contract/`. The generic RAG machinery is covered by the ragit package's own test suite, published from [github.com/eslam-aboutaleb/ragit](https://github.com/eslam-aboutaleb/ragit).
+OmniCare Financial includes automated tests with Pytest covering authentication, RAG ingestion, vector retrieval, agent tool execution, idempotency, and API endpoints. The backend suite runs against a dedicated test database (`OMNICARE_TEST_DATABASE_URL`) and exercises core paths and corner cases (empty inputs, invalid parameters, locking, stale-job reclaim, versioning, and cross-user isolation). It is organised in three layers: a tier of API-level suites under `tests/`, domain-level tests under `tests/domain/`, database-backed integration tests under `tests/integration/`, and a frozen HTTP contract suite under `tests/contract/`. The generic RAG machinery is covered by the ragnor package's own test suite, published from [github.com/eslam-aboutaleb/ragnor](https://github.com/eslam-aboutaleb/ragnor).
 
 ### Run Tests Locally
 
 ```bash
 # Backend tests (from the repository root; the backend
-# resolves ragit from the pinned git dependency)
+# resolves Ragnor from the pinned PyPI dependency)
 cd backend
 uv pip install -e .
 python -m pytest tests/ -v
@@ -134,3 +186,20 @@ docker-compose exec backend pytest tests/ -v
 
 ---
 
+
+## GitHub Actions secrets and shared CI
+
+Repository Actions secrets contain `DATABASE_URL`, `DATABASE_PASSWORD`, and
+`JWT_SECRET_KEY`, copied from the existing local environment. The database URL
+currently points to localhost and is not a hosted database endpoint. These values
+are stored for explicitly authorized application workflows; the test and RAG
+evaluation jobs continue using disposable PostgreSQL and do not receive them.
+Never point the destructive test suite at the application database.
+
+Frontend quality, workflow validation, commit validation, and secret scanning use
+`eslam-aboutaleb/ci-workflows` pinned to a reviewed commit. Secret scanning runs
+on every push, pull request, merge queue event, daily schedule, and manual run.
+It scans fetched Git history for database credentials and built-in token patterns,
+and redacts findings. `.gitleaksignore` contains only exact historical synthetic
+test-fixture fingerprints; new occurrences remain subject to scanning. Any actual
+exposed credential must be rotated with its provider as well as updated in GitHub.

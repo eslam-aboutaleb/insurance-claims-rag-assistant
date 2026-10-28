@@ -33,6 +33,7 @@ from pathlib import Path
 from sqlalchemy import text as sa_text
 
 from app.core.config import get_settings
+from app.domain.rag_settings import RagnorSettingsAdapter
 from app.core.database import async_session_factory
 from app.domain.procedures.store import ProcedureVersionStore
 from ragnor.chunking import MarkdownSectionChunker, SlidingWindowChunker
@@ -93,7 +94,7 @@ def _build_pipeline() -> IngestionPipeline:
         # never what ends up stored.
         chunker=MarkdownSectionChunker(SlidingWindowChunker()),
         session_factory=async_session_factory,
-        settings=get_settings(),
+        settings=RagnorSettingsAdapter(get_settings()),
         version_id_key="procedure_version_id",
     )
 

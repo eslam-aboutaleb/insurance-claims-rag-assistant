@@ -17,7 +17,7 @@ journey run stays manual and explicit.
    ```
 
 2. A real LLM provider key is configured in `.env`
-   (`OPENAI_API_KEY` or whichever provider `LLM_MODEL` routes to).
+   (`LITELLM_API_KEY` or whichever provider `LITELLM_MODEL` routes to).
    The journeys assert on real generated text, so a mock or stub
    LLM will not satisfy them.
 

@@ -18,8 +18,7 @@ from sqlalchemy import select
 from app.core.database import async_session_factory
 from app.domain.claims.retriever import CLAIMS_RETRIEVER_SPEC
 from app.models.claims.claim import Claim
-from app.domain.embeddings import EmbeddingFactory, get_vector_store
-from ragnor.embeddings import get_embedding_dimension
+from app.domain.embeddings import EmbeddingFactory, get_embedding_dimension, get_vector_store
 from ragnor.validation import validate_embedding
 
 logger = logging.getLogger(__name__)

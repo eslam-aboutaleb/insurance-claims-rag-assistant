@@ -60,7 +60,8 @@ jobs:
       # Deliberately blank, and it stays blank: the gate is keyless by design, so
       # a credential left in the environment would silently turn this job into a
       # paid one. The live end-to-end run is a separate, explicitly opted-in job.
-      OPENAI_API_KEY: ""
+      LITELLM_API_KEY: ""
+      LITELLM_API_BASE: ""
       OMNICARE_EVAL_LIVE: ""
       OMNICARE_EVAL_PERSIST: "0"
       OMNICARE_GIT_SHA: ${{ github.sha }}

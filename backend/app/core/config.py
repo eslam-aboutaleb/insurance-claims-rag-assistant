@@ -10,8 +10,9 @@ import socket
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Literal
+from urllib.parse import urlsplit
 
-from pydantic import Field, field_validator
+from pydantic import AliasChoices, Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -20,6 +21,16 @@ class Settings(BaseSettings):
     Application settings loaded from environment variables and .env file.
     All properties are type-safe and validated upon initialization.
     """
+
+    def __init__(self, **values: Any) -> None:
+        # Normalize explicit field names before settings sources are merged so
+        # constructor values retain precedence over aliased environment values.
+        for name, field in type(self).model_fields.items():
+            alias = field.validation_alias
+            if name in values and alias is not None:
+                preferred = alias.choices[0] if isinstance(alias, AliasChoices) else alias
+                values.setdefault(preferred, values.pop(name))
+        super().__init__(**values)
 
     # Application Metadata
     app_name: str = Field(
@@ -42,24 +53,64 @@ class Settings(BaseSettings):
     )
 
     # LLM & Agent Configuration
-    openai_api_key: str = Field(
+    litellm_api_key: SecretStr = Field(
         default="",
-        description="OpenAI API key used by LiteLLM for LLM inferences",
+        validation_alias=AliasChoices("LITELLM_API_KEY", "OPENAI_API_KEY"),
+        repr=False,
+        description="Provider API key or gateway virtual token passed to LiteLLM",
     )
-    openai_api_base: str = Field(
+    litellm_api_base: str = Field(
         default="",
-        description="Optional OpenAI API base URL override for LiteLLM routing",
+        validation_alias=AliasChoices("LITELLM_API_BASE", "OPENAI_API_BASE"),
+        description="Optional provider or gateway base URL passed to LiteLLM",
     )
     llm_model: str = Field(
         default="openai/gpt-4o-mini",
+        validation_alias=AliasChoices("LITELLM_MODEL", "LLM_MODEL"),
         description="Provider-prefixed model identifier routed via LiteLLM",
     )
 
     # Embedding Model Configuration
     embedding_model: str = Field(
         default="text-embedding-3-small",
-        description="OpenAI embedding model name used by the embedding function",
+        validation_alias=AliasChoices("LITELLM_EMBEDDING_MODEL", "EMBEDDING_MODEL"),
+        description="Provider-prefixed embedding model identifier routed via LiteLLM",
     )
+    embedding_api_key: SecretStr | None = Field(
+        default=None,
+        validation_alias="LITELLM_EMBEDDING_API_KEY",
+        repr=False,
+        description="Optional embedding credential override; unset shares LITELLM_API_KEY",
+    )
+    embedding_api_base: str | None = Field(
+        default=None,
+        validation_alias="LITELLM_EMBEDDING_API_BASE",
+        description="Optional embedding endpoint override; unset shares LITELLM_API_BASE",
+    )
+    embedding_dimension: int | None = Field(
+        default=None,
+        gt=0,
+        description="Vector dimension override for custom embedding models and gateway aliases",
+    )
+
+    @field_validator("litellm_api_base", "embedding_api_base")
+    @classmethod
+    def validate_model_endpoint(cls, value: str | None) -> str | None:
+        """Reject credentials in URLs while supporting private HTTP gateways."""
+        if not value:
+            return value
+        parsed = urlsplit(value)
+        if (
+            parsed.scheme not in {"http", "https"}
+            or not parsed.hostname
+            or parsed.username is not None
+            or parsed.password is not None
+            or parsed.query
+            or parsed.fragment
+        ):
+            raise ValueError("Model endpoint must be an HTTP(S) URL without credentials or query")
+        return value.rstrip("/")
+
     embedding_provider: str = Field(
         default="litellm",
         description=(
@@ -449,14 +500,19 @@ class Settings(BaseSettings):
         return value
 
     model_config = SettingsConfigDict(
-        # Resolve .env relative to this file's project root so settings load
-        # consistently regardless of the current working directory.
-        env_file=str(Path(__file__).resolve().parents[2] / ".env"),
+        # Keep backend-local defaults, then apply the project-root file also
+        # consumed by Compose. Process environment variables override both.
+        env_file=(
+            str(Path(__file__).resolve().parents[2] / ".env"),
+            str(Path(__file__).resolve().parents[3] / ".env"),
+        ),
         env_file_encoding="utf-8",
         # Unknown env vars are silently ignored so deployments can pass
         # extra infrastructure variables without breaking startup.
         extra="ignore",
         case_sensitive=False,
+        populate_by_name=True,
+        hide_input_in_errors=True,
     )
 
 

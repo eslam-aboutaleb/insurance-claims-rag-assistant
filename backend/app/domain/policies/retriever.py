@@ -13,6 +13,7 @@ import logging
 from typing import Any
 
 from app.core.config import get_settings
+from app.domain.rag_settings import RagnorSettingsAdapter
 from app.core.database import async_session_factory
 from ragnor.retrieval import HybridRetriever, RetrieverSpec, as_dicts
 
@@ -49,7 +50,7 @@ class PolicyRetriever:
         self._session_factory = session_factory or async_session_factory
         self._retriever = HybridRetriever(
             spec=POLICY_RETRIEVER_SPEC,
-            settings=self._settings,
+            settings=RagnorSettingsAdapter(self._settings),
             session_factory=self._session_factory,
         )
 

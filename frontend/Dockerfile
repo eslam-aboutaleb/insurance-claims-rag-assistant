@@ -7,7 +7,7 @@
 #   3. runner   - Serve the built assets with a minimal Node.js runtime.
 #
 # Security considerations:
-#   - Uses node:20-alpine (minimal attack surface).
+#   - Uses node:24-alpine (minimal attack surface).
 #   - Runs as non-root user (appuser:UID 1001) in the final stage.
 #   - Only copies built assets (dist/) and static files to the runner stage.
 #   - Installs serve globally for static file serving (no build tools in prod).
@@ -18,7 +18,7 @@
 # ==============================================================================
 # Install dependencies once and cache them across builds. This stage is only
 # rebuilt when package.json or lock files change.
-FROM node:20-alpine AS deps
+FROM node:24-alpine AS deps
 
 # Install libc6-compat for Alpine Linux compatibility with native Node modules.
 RUN apk add --no-cache libc6-compat
@@ -43,7 +43,7 @@ RUN \
 # ==============================================================================
 # Build the production-optimized Vite bundle. Copies node_modules from the
 # deps stage to avoid reinstalling dependencies.
-FROM node:20-alpine AS builder
+FROM node:24-alpine AS builder
 
 WORKDIR /app
 
@@ -76,7 +76,7 @@ RUN \
 # ==============================================================================
 # Minimal runtime image containing only the built assets and a static file
 # server. No build tools, no source code, no node_modules.
-FROM node:20-alpine AS runner
+FROM node:24-alpine AS runner
 
 WORKDIR /app
 

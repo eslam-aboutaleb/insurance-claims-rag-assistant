@@ -14,7 +14,7 @@
 #   - /app/.next                - Anonymous volume to persist build cache.
 # ==============================================================================
 
-FROM node:20
+FROM node:24
 
 # Install system dependencies required for Playwright/Chromium
 RUN apt-get update && apt-get install -y \

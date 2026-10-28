@@ -19,7 +19,7 @@ concurrency:
 jobs:
   python:
     name: Backend Python quality
-    uses: eslam-aboutaleb/ci-workflows/.github/workflows/python.yml@227a096a48326e07e5bcf128cfeafb9251706e78
+    uses: eslam-aboutaleb/ci-workflows/.github/workflows/python.yml@cb10612004f98e6ec10158af72c4d0e1a044e436
     with:
       project-dir: backend
       manager: pip
@@ -31,7 +31,7 @@ jobs:
 
   integration:
     name: Backend PostgreSQL and Redis integration
-    uses: eslam-aboutaleb/ci-workflows/.github/workflows/integration.yml@227a096a48326e07e5bcf128cfeafb9251706e78
+    uses: eslam-aboutaleb/ci-workflows/.github/workflows/integration.yml@cb10612004f98e6ec10158af72c4d0e1a044e436
     with:
       project-dir: backend
       postgres-image: pgvector/pgvector:pg16
@@ -39,22 +39,22 @@ jobs:
 
   node:
     name: Frontend Node quality
-    uses: eslam-aboutaleb/ci-workflows/.github/workflows/node.yml@227a096a48326e07e5bcf128cfeafb9251706e78
+    uses: eslam-aboutaleb/ci-workflows/.github/workflows/node.yml@cb10612004f98e6ec10158af72c4d0e1a044e436
     with:
       project-dir: frontend
       manager: npm
-      node-versions: '["22"]'
+      node-versions: '["24"]'
       operating-systems: '["ubuntu-latest"]'
       test-shards: 1
       audit-level: high
 
   browser:
     name: Frontend Playwright
-    uses: eslam-aboutaleb/ci-workflows/.github/workflows/browser.yml@227a096a48326e07e5bcf128cfeafb9251706e78
+    uses: eslam-aboutaleb/ci-workflows/.github/workflows/browser.yml@cb10612004f98e6ec10158af72c4d0e1a044e436
     with:
       project-dir: frontend
       manager: npm
-      node-version: '22'
+      node-version: '24'
       test-script: e2e:ci
       browsers: chromium
       shards: 1
@@ -73,7 +73,7 @@ jobs:
             context: frontend
           - dockerfile: frontend/Dockerfile.dev
             context: frontend
-    uses: eslam-aboutaleb/ci-workflows/.github/workflows/docker.yml@227a096a48326e07e5bcf128cfeafb9251706e78
+    uses: eslam-aboutaleb/ci-workflows/.github/workflows/docker.yml@cb10612004f98e6ec10158af72c4d0e1a044e436
     with:
       dockerfile: ${{ matrix.image.dockerfile }}
       build-context: ${{ matrix.image.context }}
@@ -81,7 +81,7 @@ jobs:
 
   security:
     name: Central security analysis
-    uses: eslam-aboutaleb/ci-workflows/.github/workflows/security.yml@227a096a48326e07e5bcf128cfeafb9251706e78
+    uses: eslam-aboutaleb/ci-workflows/.github/workflows/security.yml@cb10612004f98e6ec10158af72c4d0e1a044e436
     permissions:
       contents: read
       actions: read
@@ -93,12 +93,18 @@ jobs:
 
   workflow-validation:
     name: Central workflow syntax validation
-    uses: eslam-aboutaleb/ci-workflows/.github/workflows/workflow-lint.yml@227a096a48326e07e5bcf128cfeafb9251706e78
+    uses: eslam-aboutaleb/ci-workflows/.github/workflows/workflow-lint.yml@cb10612004f98e6ec10158af72c4d0e1a044e436
+
+  commit-messages:
+    permissions:
+      contents: read
+      pull-requests: read
+    uses: eslam-aboutaleb/ci-workflows/.github/workflows/commit-messages.yml@cb10612004f98e6ec10158af72c4d0e1a044e436
 
   ci-success:
     name: CI Status Check
     if: always()
-    needs: [python, integration, node, browser, docker, security, workflow-validation]
+    needs: [python, integration, node, browser, docker, security, workflow-validation, commit-messages]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:

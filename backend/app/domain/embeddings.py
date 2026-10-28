@@ -12,10 +12,11 @@ from __future__ import annotations
 
 from app.core.config import get_settings
 from app.core.database import async_session_factory
+from app.domain.rag_settings import RagnorSettingsAdapter
 from ragnor.embeddings import (
     EmbeddingFunction,
     LitellmEmbeddingFunction,
-    get_embedding_dimension,
+    get_embedding_dimension as _ragnor_embedding_dimension,
     register_dimension,
 )
 from ragnor.embeddings.registry import (
@@ -30,6 +31,15 @@ __all__ = [
     "get_vector_store",
     "register_dimension",
 ]
+
+
+def get_embedding_dimension(model: str | None = None) -> int:
+    """Resolve the configured model and optional alias dimension override."""
+    settings = get_settings()
+    selected_model = model or settings.embedding_model
+    if selected_model == settings.embedding_model and settings.embedding_dimension is not None:
+        return settings.embedding_dimension
+    return _ragnor_embedding_dimension(selected_model.removeprefix("openai/"))
 
 
 class EmbeddingFactory:
@@ -55,7 +65,7 @@ class EmbeddingFactory:
             An embedding function instance ready for use with the
             retriever and ingestion pipelines.
         """
-        return _get_embedding_function(get_settings())
+        return _get_embedding_function(RagnorSettingsAdapter(get_settings()))
 
 
 def get_vector_store(
@@ -79,7 +89,7 @@ def get_vector_store(
         table_name=table_name,
         id_field=id_field,
         embedding_dim=(embedding_dim if embedding_dim is not None else get_embedding_dimension()),
-        settings=settings,
+        settings=RagnorSettingsAdapter(settings),
         session_factory=async_session_factory,
         embedding_fn=EmbeddingFactory.get_embedding_function(),
     )

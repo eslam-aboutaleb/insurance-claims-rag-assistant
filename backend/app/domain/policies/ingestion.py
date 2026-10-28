@@ -26,6 +26,7 @@ from typing import Any
 from sqlalchemy import select, text as sa_text
 
 from app.core.config import get_settings
+from app.domain.rag_settings import RagnorSettingsAdapter
 from app.core.database import async_session_factory
 from app.domain.policies.retriever import POLICY_RETRIEVER_SPEC
 from app.models.policies.policy import Policy
@@ -282,7 +283,7 @@ async def ingest_policy(policy_path: str | None = None) -> int:
         embedder=EmbeddingFactory.get_embedding_function(),
         chunker=chunker,
         session_factory=async_session_factory,
-        settings=settings,
+        settings=RagnorSettingsAdapter(settings),
         version_id_key="policy_version_id",
         source_id_key="policy_id",
     )

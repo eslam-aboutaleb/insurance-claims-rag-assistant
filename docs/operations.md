@@ -5,29 +5,29 @@
 | Technology                               | Selection Rationale                                                                                                                                           | Key Advantages                                                                                                                                                                                                                                                                                                                                                                                                           |
 | :--------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------ | :----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Google ADK** _(Agent Development Kit)_ | **Enterprise Agent Framework** -- Standardized, resilient agent orchestration engine providing native session tracking, tool execution loops, and guardrails. | _ **Native Tool Orchestration**: Converts standard Python functions directly into model-consumable tool definitions.<br>_ **Multi-Turn Session State**: A swappable `BaseSessionService`, so in-process storage and the PostgreSQL-backed store share one contract and the runner is unchanged by the swap.<br>_ **Model Agnostic**: Seamlessly interfaces with third-party providers via LiteLLM.<br>_ **Clean Pattern**: Separates system instructions, tool definitions, and runtime execution. |
-| **LiteLLM**                              | **Universal LLM Proxy & Router** -- Decouples the core agent code from vendor-specific LLM APIs.                                                              | _ **100+ Provider Support**: Switch effortlessly between OpenAI, Anthropic, Google Gemini, Azure, and open-source models.<br>_ **Zero Code Changes**: Change the model with a single environment variable (`LLM_MODEL`).<br>\* **Standardized Input/Output**: Normalizes API schemas, cost tracking, and error handling across providers.                                                                                |
+| **LiteLLM**                              | **Universal LLM Proxy & Router** -- Decouples the core agent code from vendor-specific LLM APIs.                                                              | _ **100+ Provider Support**: Switch effortlessly between OpenAI, Anthropic, Google Gemini, Azure, and open-source models.<br>_ **Zero Code Changes**: Change the model with a single environment variable (`LITELLM_MODEL`).<br>\* **Standardized Input/Output**: Normalizes API schemas, cost tracking, and error handling across providers.                                                                                |
 | **pgvector**                          | **PostgreSQL Vector Extension** -- Native pgvector extension inside PostgreSQL for hybrid vector + PostgreSQL full-text search with Reciprocal Rank Fusion. | _ **Unified Storage**: Embeddings and keyword search live in the same Postgres instance as claims and conversations.<br>_ **Hybrid Search**: Combines vector similarity (HNSW) with PostgreSQL full-text search (tsvector/tsquery) using RRF for robust retrieval.<br>_ **No External Service**: Eliminates the need for a separate vector database process or Docker volume.                                                                                   |
-| **ragit** _(GitHub)_           | **Domain-Agnostic RAG Toolkit** -- Published package (pinned git dependency, `ragit-toolkit[pgvector] @ v0.3.1`) carrying every generic RAG primitive: chunking, embeddings, vector stores, ingestion, evaluation, and the job outbox. | _ **Clean Separation**: OmniCare-specific bindings live in `backend/app/domain/`; generic machinery lives in `ragit`.<br>_ **Library Isolation**: ragit never imports `app.*`.<br>_ **Reusable**: Any FastAPI/SQLAlchemy service can adopt it; see [github.com/eslam-aboutaleb/ragit](https://github.com/eslam-aboutaleb/ragit). |
+| **Ragnor** _(PyPI)_           | **Domain-Agnostic RAG Toolkit** -- Published package (pinned PyPI dependency, `ragnor[pgvector]==0.4.1`) carrying every generic RAG primitive: chunking, embeddings, vector stores, ingestion, evaluation, and the job outbox. | _ **Clean Separation**: OmniCare-specific bindings live in `backend/app/domain/`; generic machinery lives in `ragnor`.<br>_ **Library Isolation**: ragnor never imports `app.*`.<br>_ **Reusable**: Any FastAPI/SQLAlchemy service can adopt it; see [github.com/eslam-aboutaleb/ragnor](https://github.com/eslam-aboutaleb/ragnor). |
 
-### The ragit Library
+### The ragnor Library
 
-The RAG subsystem is extracted into an installable, domain-agnostic library so the retrieval machinery can be reused (and tested) independently of OmniCare's schema. `ragit` is published from [github.com/eslam-aboutaleb/ragit](https://github.com/eslam-aboutaleb/ragit). The backend pins it as a git dependency with the `pgvector` extra in `backend/pyproject.toml`:
+The RAG subsystem is extracted into an installable, domain-agnostic library so the retrieval machinery can be reused (and tested) independently of OmniCare's schema. `ragnor` is published from [github.com/eslam-aboutaleb/ragnor](https://github.com/eslam-aboutaleb/ragnor). The backend pins it as a PyPI dependency with the `pgvector` extra in `backend/pyproject.toml`:
 
 ```
-"ragit-toolkit[pgvector] @ git+https://github.com/eslam-aboutaleb/ragit.git@v0.3.1",
+"ragnor[pgvector]==0.4.1",
 ```
 
-| ragit module           | Responsibility                                                                                              |
+| ragnor module           | Responsibility                                                                                              |
 | :----------------------- | :---------------------------------------------------------------------------------------------------------- |
-| `ragit.chunking`        | `MarkdownSectionChunker`, `SlidingWindowChunker`, and the chunker registry                                  |
-| `ragit.embeddings`      | `EmbeddingFunction` protocol, LiteLLM implementation, dimension validation, provider registry               |
-| `ragit.stores`          | Vector stores: `PgVectorStore` (hybrid vector + PostgreSQL full-text search with RRF), `QdrantStore`, `ChromaStore`, `FaissStore`, and `InMemoryVectorStore` |
-| `ragit.ingestion`       | `IngestionPipeline` (hash/compare/retire/chunk/embed/upsert), document sources, snapshot versioning, locking |
-| `ragit.jobs`            | Outbox `EmbeddingJobStore` protocol, `process_pending_jobs`, `reclaim_stale_jobs`, drainer CLI              |
-| `ragit.evaluation`      | RAG evaluation harness: retrieval metrics (precision/recall@k, MRR) and LLM-judged answer metrics           |
-| `ragit.validation`      | SQL identifier allowlist and embedding dimension checks                                                     |
+| `ragnor.chunking`        | `MarkdownSectionChunker`, `SlidingWindowChunker`, and the chunker registry                                  |
+| `ragnor.embeddings`      | `EmbeddingFunction` protocol, LiteLLM implementation, dimension validation, provider registry               |
+| `ragnor.stores`          | Vector stores: `PgVectorStore` (hybrid vector + PostgreSQL full-text search with RRF), `QdrantStore`, `ChromaStore`, `FaissStore`, and `InMemoryVectorStore` |
+| `ragnor.ingestion`       | `IngestionPipeline` (hash/compare/retire/chunk/embed/upsert), document sources, snapshot versioning, locking |
+| `ragnor.jobs`            | Outbox `EmbeddingJobStore` protocol, `process_pending_jobs`, `reclaim_stale_jobs`, drainer CLI              |
+| `ragnor.evaluation`      | RAG evaluation harness: retrieval metrics (precision/recall@k, MRR) and LLM-judged answer metrics           |
+| `ragnor.validation`      | SQL identifier allowlist and embedding dimension checks                                                     |
 
-**Domain adapters** (`backend/app/domain/`) bind ragit to OmniCare's tables: `domain/policies/` owns policy versioning and ingestion, `domain/claims/` owns claim ingestion, the embedding-job outbox, and owner-scoped claim retrieval, `domain/procedures/` owns the second index of domain procedure playbooks, and `domain/embeddings.py` wires the embedding function and vector store. The claims adapter always passes `owner_id` as a retrieval filter, so cross-user data leakage is structurally impossible.
+**Domain adapters** (`backend/app/domain/`) bind ragnor to OmniCare's tables: `domain/policies/` owns policy versioning and ingestion, `domain/claims/` owns claim ingestion, the embedding-job outbox, and owner-scoped claim retrieval, `domain/procedures/` owns the second index of domain procedure playbooks, and `domain/embeddings.py` wires the embedding function and vector store. The claims adapter always passes `owner_id` as a retrieval filter, so cross-user data leakage is structurally impossible.
 
 **Embedding drain worker** (`embedding-drain` service): claim embeddings never block claim submission. `POST /api/v1/claims/confirm` writes the claim and its `embedding_jobs` row in the same transaction (outbox pattern); the drainer worker claims pending jobs with `FOR UPDATE SKIP LOCKED`, generates the embedding, and upserts it into pgvector. Multiple drainer replicas scale without coordination, and jobs stuck in `processing` past `JOB_STALE_AFTER_SECONDS` are reclaimed automatically.
 
@@ -175,7 +175,7 @@ omnicare-financial/
 |   +-- Dockerfile.dev              # Development image with hot reload
 |   +-- .dockerignore               # Backend build context filter
 |   +-- .env.example                # Backend-side environment template
-|   +-- pyproject.toml              # Build tool specifications (incl. the ragit git pin)
+|   +-- pyproject.toml              # Build tool specifications (incl. the Ragnor PyPI pin)
 |   +-- README.md                   # Backend engineering guide
 |   +-- alembic.ini                 # Alembic CLI configuration
 |   +-- alembic/                    # Database migration version control
@@ -231,7 +231,7 @@ omnicare-financial/
 |   |   |       +-- notifications.py # GET /notifications, POST /notifications/{id}/read
 |   |   |       +-- admin.py        # GET /admin/* (role-gated queue, jobs, audit, feedback)
 |   |   |       +-- rag_eval.py     # POST /rag/evaluate, GET /rag/dataset
-|   |   +-- domain/                 # Domain adapters over ragit
+|   |   +-- domain/                 # Domain adapters over ragnor
 |   |   |   +-- __init__.py         # Domain package init
 |   |   |   +-- embeddings.py       # EmbeddingFactory + vector store wiring
 |   |   |   +-- evaluation.py       # RAG evaluation CLI runner
@@ -251,7 +251,7 @@ omnicare-financial/
 |   |   |   +-- procedures/         # Procedure playbook bindings (second index)
 |   |   |   |   +-- __init__.py     # Procedures package init
 |   |   |   |   +-- ingestion.py    # Procedure corpus ingestion + startup gate
-|   |   |   |   +-- store.py        # ProcedureVersionStore (ragit VersionStore)
+|   |   |   |   +-- store.py        # ProcedureVersionStore (ragnor VersionStore)
 |   |   |   |   +-- retrieval.py    # Procedure hybrid retrieval
 |   |   |   |   +-- tools.py        # get_procedure tool binding
 |   |   |   +-- notifications/      # Notification outbox bindings
