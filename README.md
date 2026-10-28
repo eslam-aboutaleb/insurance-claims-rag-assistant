@@ -204,7 +204,17 @@ The OmniCare Assistant adheres to strict enterprise safety controls:
 
 The [architecture reference](docs/architecture.md) explains the request and retrieval paths, while the [API guide](docs/api.md) includes examples for policy questions, claims lookup, and confirmation-gated submission.
 
-The screenshot assets and walkthrough remain available under `frontend/public/readme/`.
+The application uses a ChatGPT-inspired light palette: white and light-gray surfaces, dark text, subtle borders, and blue accents. These screenshots show the actual frontend with synthetic demo responses, policies, and claims; they do not contain customer data or represent live coverage decisions.
+
+| Sign in | New conversation |
+| --- | --- |
+| ![Sign-in page with the new light palette](frontend/public/readme/02-login.png) | ![Empty chat with suggested questions](frontend/public/readme/01-empty-state.png) |
+| **Conversation sidebar** | **Policy answer and sources** |
+| ![Chat interface and conversation history](frontend/public/readme/03-chat-interface.png) | ![Water damage policy answer with citations](frontend/public/readme/04-policy-question.png) |
+| **Expanded tool details** | **Claim status** |
+| ![Policy lookup arguments and result](frontend/public/readme/05-tool-details.png) | ![Water damage claim status card](frontend/public/readme/06-claim-status.png) |
+
+See the [frontend guide](frontend/README.md#readme-screenshots) for the screenshot capture command.
 
 ---
 
