@@ -2,7 +2,7 @@
 Tests for versioned policy ingestion (Feature 15: document-version-model).
 
 The ingestion orchestration and the snapshot comparison that makes ingestion idempotent live
-in the shared ``ragit`` library (tested in ``libs/ragit/tests/test_ingestion_pipeline.py``).
+in the shared ``ragnor`` library (tested in ``libs/ragnor/tests/test_ingestion_pipeline.py``).
 These tests exercise the OmniCare ``PolicyVersionStore`` -- the ``VersionStore`` implementation
 the adapter binds to the pipeline -- against the real test database.
 """
@@ -15,7 +15,7 @@ from sqlalchemy import text
 
 from app.core.database import async_session_factory
 from app.domain.policies.ingestion import PolicyVersionStore
-from ragit.ingestion import IngestionSnapshot
+from ragnor.ingestion import IngestionSnapshot
 
 _POLICY_TABLES = ("policy_chunks", "policy_versions", "policy_ingestion_meta", "policies")
 
@@ -107,7 +107,7 @@ async def test_store_find_active_returns_the_stored_snapshot(clean_policy_tables
     The pipeline compares this snapshot against the current one
     to decide whether the source changed (the "skip when the
     hash is unchanged" decision); the comparison itself is
-    tested in ragit.
+    tested in ragnor.
     """
     store = PolicyVersionStore()
 

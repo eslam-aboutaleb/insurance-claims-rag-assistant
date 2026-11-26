@@ -1,7 +1,7 @@
 """
 Eval determinism test.
 
-``run_evaluation`` lives in the shared ``ragit`` library with its retrieval function and dataset
+``run_evaluation`` lives in the shared ``ragnor`` library with its retrieval function and dataset
 injected. This test drives the moved runner with a stubbed retrieval function and the
 application's curated dataset, and snapshots the resulting metrics: the formulas moved
 verbatim, so the deterministic metric keys must match the pre-extraction values exactly.
@@ -18,7 +18,7 @@ from app.domain.evaluation import (
     QuestionCategory,
     get_eval_dataset,
 )
-from ragit.evaluation.runner import (
+from ragnor.evaluation.runner import (
     EvalConfig,
     run_evaluation,
 )
@@ -71,7 +71,7 @@ async def test_run_evaluation_metrics_match_pre_move_snapshot():
     )
     assert len(dataset) == 2
 
-    # ragit 0.3.0 renamed "end-to-end" context scoring to "context".
+    # ragnor 0.3.0 renamed "end-to-end" context scoring to "context".
     result = await run_evaluation(
         EvalConfig(mode="context", judge="heuristic", n_results=5),
         _stubbed_retrieval_fn,

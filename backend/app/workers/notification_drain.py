@@ -2,9 +2,9 @@
 Outbox drainer for the ``notification_jobs`` table.
 
 Thin app-side entry point: wires the OmniCare notification store and processor into
-ragit's generic drainer. The drain loop itself — per-pass stale reclaim,
+ragnor's generic drainer. The drain loop itself — per-pass stale reclaim,
 ``FOR UPDATE SKIP LOCKED`` claiming, failure retry on the next tick, graceful
-SIGINT/SIGTERM — lives in :mod:`ragit.jobs.drainer`.
+SIGINT/SIGTERM — lives in :mod:`ragnor.jobs.drainer`.
 
 Run it directly:
 
@@ -29,14 +29,14 @@ import sys
 
 from app.core.config import settings
 from app.domain.notifications.outbox import NotificationJobProcessor, NotificationJobStore
-from ragit.jobs.drainer import main as _ragit_main
+from ragnor.jobs.drainer import main as _ragnor_main
 
 
 def main() -> int:
     """Console entry point: drain the notification outbox until signaled."""
     store = NotificationJobStore()
     processor = NotificationJobProcessor()
-    return _ragit_main(
+    return _ragnor_main(
         store,
         processor,
         interval=settings.notification_drain_interval_seconds,

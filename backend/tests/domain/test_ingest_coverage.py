@@ -1,6 +1,6 @@
 """Coverage tests for app.domain.policies.ingestion uncovered paths.
 
-The chunking tests moved to ``libs/ragit/tests/test_chunking.py`` together with the
+The chunking tests moved to ``libs/ragnor/tests/test_chunking.py`` together with the
 chunking implementation; the ingestion-path tests below point at the domain adapter.
 """
 

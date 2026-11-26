@@ -1,15 +1,15 @@
-"""Notification outbox over ragit's generic job store.
+"""Notification outbox over ragnor's generic job store.
 
 Claimant-facing notifications follow the same protocol as the claim embedding
-jobs. :class:`NotificationJobStore` implements ragit's ``EmbeddingJobStore``
+jobs. :class:`NotificationJobStore` implements ragnor's ``EmbeddingJobStore``
 protocol against the ``notification_jobs`` table,
 :func:`enqueue_notification_job` writes a pending row through
-:func:`ragit.jobs.enqueue_job` — in the caller's transaction when a session is
+:func:`ragnor.jobs.enqueue_job` — in the caller's transaction when a session is
 supplied, so the claim change and the notification about it commit together —
 :class:`NotificationJobProcessor` renders the message from a per-job-type template
 and materialises it in the ``notifications`` feed, and
 :func:`process_pending_notification_jobs` /
-:func:`reclaim_stale_notification_jobs` wire the store and processor into ragit's
+:func:`reclaim_stale_notification_jobs` wire the store and processor into ragnor's
 generic job functions.
 
 Invariant for anything that writes a ``notification_jobs`` row
@@ -58,10 +58,10 @@ from app.models.platform.notification_job import (
     Notification,
     NotificationJob,
 )
-from ragit.jobs import JobPayload, claim_jobs, enqueue_job
-from ragit.jobs import (
-    process_pending_jobs as _ragit_process_pending_jobs,
-    reclaim_stale_jobs as _ragit_reclaim_stale_jobs,
+from ragnor.jobs import JobPayload, claim_jobs, enqueue_job
+from ragnor.jobs import (
+    process_pending_jobs as _ragnor_process_pending_jobs,
+    reclaim_stale_jobs as _ragnor_reclaim_stale_jobs,
 )
 
 logger = logging.getLogger(__name__)
@@ -85,7 +85,7 @@ def _payload_from_row(row: NotificationJob) -> JobPayload:
 
 
 class NotificationJobStore:
-    """ragit ``EmbeddingJobStore`` implemented against ``notification_jobs``."""
+    """ragnor ``EmbeddingJobStore`` implemented against ``notification_jobs``."""
 
     def __init__(self, session_factory: Any = None) -> None:
         self._session_factory = session_factory or async_session_factory
@@ -252,7 +252,7 @@ class NotificationJobStore:
 
 
 class NotificationJobProcessor:
-    """ragit ``JobProcessor`` that renders a notification and delivers it."""
+    """ragnor ``JobProcessor`` that renders a notification and delivers it."""
 
     async def process(self, job: JobPayload) -> None:
         """Render and deliver one claimed notification job.
@@ -512,11 +512,11 @@ async def enqueue_notification_job(  # noqa: PLR0913, PLR0917
 ) -> None:
     """Queue a notification for asynchronous delivery.
 
-    Delegates to ragit's :func:`ragit.jobs.enqueue_job`
+    Delegates to ragnor's :func:`ragnor.jobs.enqueue_job`
     with the caller's session: when ``session`` is supplied,
     the job row is only added and flushed, so the claim change and
     the notification about it are persisted atomically by the
-    caller's commit. When ``session`` is None, ragit opens
+    caller's commit. When ``session`` is None, ragnor opens
     and commits its own transaction.
 
     A failure to enqueue is logged and never raised when this function owns the
@@ -585,7 +585,7 @@ async def process_pending_notification_jobs(
 
     store = NotificationJobStore()
     processor = NotificationJobProcessor()
-    return await _ragit_process_pending_jobs(
+    return await _ragnor_process_pending_jobs(
         store,
         processor,
         limit=limit,
@@ -617,7 +617,7 @@ async def reclaim_stale_notification_jobs(
         stale_after_seconds = settings.job_stale_after_seconds
 
     store = NotificationJobStore()
-    return await _ragit_reclaim_stale_jobs(
+    return await _ragnor_reclaim_stale_jobs(
         store,
         stale_after_seconds=stale_after_seconds,
     )

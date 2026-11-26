@@ -1,7 +1,7 @@
 """
 API endpoint tests for the RAG evaluation subsystem.
 
-The dataset, evaluator, harness, and runner tests moved to ``libs/ragit/tests``; the HTTP
+The dataset, evaluator, harness, and runner tests moved to ``libs/ragnor/tests``; the HTTP
 endpoints stay here because they exercise the OmniCare API surface and its authentication.
 
   - GET  /api/v1/rag/dataset
