@@ -43,19 +43,19 @@ from app.domain.evaluation import (
     load_policy_section_texts,
     run_evaluation,
 )
-from ragit.evaluation.dataset import Difficulty, EvalSample
+from ragnor.evaluation.dataset import Difficulty, EvalSample
 
 logger = logging.getLogger(__name__)
 
 MODE_ALIASES = {
-    # Both spellings are accepted so a reader who knows ragit's vocabulary and a
+    # Both spellings are accepted so a reader who knows ragnor's vocabulary and a
     # reader who only knows this module's flags both get the mode they meant.
     "retrieval": "retrieval-only",
     "retrieval-only": "retrieval-only",
     "context": "context",
     "end-to-end": "end-to-end",
 }
-"""Accepted ``--mode`` spellings mapped onto ragit's mode names."""
+"""Accepted ``--mode`` spellings mapped onto ragnor's mode names."""
 
 DATASET_SELECTORS = ("stratified", "answerable", "unanswerable")
 """Accepted ``--dataset`` values."""

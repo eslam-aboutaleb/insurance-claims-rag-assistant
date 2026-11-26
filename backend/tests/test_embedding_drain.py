@@ -1,10 +1,10 @@
 """
 Tests for the OmniCare embedding drainer entry point.
 
-The drain loop itself lives in ``ragit.jobs.drainer`` and is tested in
-``libs/ragit/tests/test_embedding_drain.py``. These tests pin the app-side wiring: the
+The drain loop itself lives in ``ragnor.jobs.drainer`` and is tested in
+``libs/ragnor/tests/test_embedding_drain.py``. These tests pin the app-side wiring: the
 thin ``main()`` constructs the OmniCare store and claim processor and hands them, with
-the validated settings, to ragit's drainer.
+the validated settings, to ragnor's drainer.
 """
 
 from __future__ import annotations
@@ -16,13 +16,13 @@ import pytest
 from app.workers import embedding_drain
 
 
-def test_main_wires_app_store_and_processor_into_ragit_drainer() -> None:
+def test_main_wires_app_store_and_processor_into_ragnor_drainer() -> None:
     """The entry point builds the OmniCare store and processor and
-    passes the validated drain settings to ragit's drainer."""
+    passes the validated drain settings to ragnor's drainer."""
     from app.core.config import settings
     from app.domain.claims.outbox import ClaimJobProcessor, SqlAlchemyJobStore
 
-    with patch.object(embedding_drain, "_ragit_main", return_value=0) as mock_main:
+    with patch.object(embedding_drain, "_ragnor_main", return_value=0) as mock_main:
         assert embedding_drain.main() == 0
 
     args, kwargs = mock_main.call_args

@@ -2,11 +2,11 @@
 Outbox drainer for the ``embedding_jobs`` table.
 
 Thin app-side entry point: wires the
-OmniCare job store and claim processor into ragit's
+OmniCare job store and claim processor into ragnor's
 generic drainer. The drain loop itself — per-pass stale
 reclaim, ``FOR UPDATE SKIP LOCKED`` claiming, failure
 retry on the next tick, graceful SIGINT/SIGTERM — lives
-in :mod:`ragit.jobs.drainer`.
+in :mod:`ragnor.jobs.drainer`.
 
 Run it directly:
 
@@ -27,14 +27,14 @@ import sys
 
 from app.core.config import settings
 from app.domain.claims.outbox import ClaimJobProcessor, SqlAlchemyJobStore
-from ragit.jobs.drainer import main as _ragit_main
+from ragnor.jobs.drainer import main as _ragnor_main
 
 
 def main() -> int:
     """Console entry point: drain the embedding outbox until signaled."""
     store = SqlAlchemyJobStore()
     processor = ClaimJobProcessor()
-    return _ragit_main(
+    return _ragnor_main(
         store,
         processor,
         interval=settings.embedding_drain_interval_seconds,
