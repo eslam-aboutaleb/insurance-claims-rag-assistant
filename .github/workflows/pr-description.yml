@@ -10,4 +10,4 @@ permissions:
 
 jobs:
   description-contract:
-    uses: eslam-aboutaleb/ci-workflows/.github/workflows/pr-description.yml@cb10612004f98e6ec10158af72c4d0e1a044e436
+    uses: eslam-aboutaleb/ci-workflows/.github/workflows/pr-description.yml@0ca1c71bd05c307c9bc1f45349e10f4d2bec940e
